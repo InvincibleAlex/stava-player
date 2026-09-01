@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 150 150"
+   version="1.1"
+   id="svg1"
+   sodipodi:docname="headphones-solid-full.svg"
+   width="150"
+   height="150"
+   inkscape:version="1.4.2 (f4327f4, 2025-05-13)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1" />
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#505050"
+     bordercolor="#ffffff"
+     borderopacity="1"
+     inkscape:showpageshadow="0"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="1"
+     inkscape:deskcolor="#505050"
+     inkscape:zoom="2.0053106"
+     inkscape:cx="184.01139"
+     inkscape:cy="259.56078"
+     inkscape:window-width="3840"
+     inkscape:window-height="2054"
+     inkscape:window-x="-11"
+     inkscape:window-y="-11"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg1" />
+  <!--!Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2026 Fonticons, Inc.-->
+  <path
+     d="m 21.42857,70 c 0,-27.625 23.97322,-50 53.57143,-50 29.59821,0 53.57143,22.375 53.57143,50 V 81.71875 C 125.22321,80.625 121.60714,80 117.85714,80 H 112.5 c -8.87277,0 -16.07143,6.71875 -16.07143,15 v 40 c 0,8.28125 7.19866,15 16.07143,15 h 5.35714 C 135.60268,150 150,136.5625 150,120 V 70 C 150,31.34375 116.41741,0 75,0 33.58259,0 0,31.34375 0,70 v 50 c 0,16.5625 14.39732,30 32.14286,30 H 37.5 c 8.87277,0 16.07143,-6.71875 16.07143,-15 V 95 c 0,-8.28125 -7.19866,-15 -16.07143,-15 h -5.35714 c -3.75,0 -7.36607,0.59375 -10.71429,1.71875 z"
+     id="path1"
+     style="stroke-width:0.323468" />
+</svg>

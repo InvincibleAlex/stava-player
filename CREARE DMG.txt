@@ -1,0 +1,31 @@
+Build macOS (.app + .dmg)
+
+1. Activează mediul sau folosește direct .venv.
+2. Rulează build-ul aplicației:
+	tools/mac/build_mac.sh
+3. Creează DMG-ul:
+	tools/mac/create_dmg.sh
+
+Signing (opțional, pentru distribuție reală)
+
+1. Setează identitatea de semnare:
+	export MACOS_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+2. Semnează aplicația și DMG-ul:
+	tools/mac/sign_mac.sh
+
+Notarization (opțional, recomandat)
+
+Varianta cu profil keychain:
+	export NOTARY_PROFILE="your-notary-profile"
+	tools/mac/notarize_mac.sh
+
+Varianta cu credentiale directe:
+	export APPLE_ID="your@apple.id"
+	export APPLE_TEAM_ID="TEAMID"
+	export APPLE_APP_PASSWORD="app-specific-password"
+	tools/mac/notarize_mac.sh
+
+Artefacte:
+
+- dist/Stava Player.app
+- dist/Stava Player-mac.dmg

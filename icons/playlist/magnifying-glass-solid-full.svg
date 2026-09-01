@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 150 150"
+   version="1.1"
+   id="svg1"
+   sodipodi:docname="magnifying-glass-solid-full.svg"
+   width="150"
+   height="150"
+   inkscape:version="1.4.2 (f4327f4, 2025-05-13)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1" />
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="0.66640625"
+     inkscape:cx="267.10434"
+     inkscape:cy="221.33646"
+     inkscape:window-width="3840"
+     inkscape:window-height="2054"
+     inkscape:window-x="-11"
+     inkscape:window-y="-11"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg1" />
+  <!--!Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2026 Fonticons, Inc.-->
+  <path
+     d="m 121.88095,60.928575 c 0,13.445295 -4.36545,25.865352 -11.71932,35.942 l 37.09165,37.113705 c 3.66229,3.66157 3.66229,9.60797 0,13.26954 -3.66229,3.66157 -9.60984,3.66157 -13.27213,0 L 96.889497,110.14011 C 86.81088,117.49255 74.388397,121.85715 60.940475,121.85715 27.276722,121.85715 0,94.585755 0,60.928575 0,27.271395 27.276722,0 60.940475,0 94.604227,0 121.88095,27.271395 121.88095,60.928575 Z M 60.940475,103.10989 c 23.292152,0 42.189555,-18.89371 42.189555,-42.181315 0,-23.287605 -18.897403,-42.18132 -42.189555,-42.18132 -23.292153,0 -42.18956,18.893715 -42.18956,42.18132 0,23.287605 18.897407,42.181315 42.18956,42.181315 z"
+     id="path1"
+     style="stroke-width:0.292955" />
+</svg>

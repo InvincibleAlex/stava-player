@@ -1,0 +1,59 @@
+
+# PASUL 2: GENERARE EXECUTABIL (PyInstaller)
+# ------------------------------------------
+# Deschide CMD sau PowerShell în folderul proiectului și rulează:
+# (Atenție: Pe Windows separatorul la --add-data este punct și virgulă ';')
+
+# 1) Creează mediu virtual local (o singură dată):
+py -m venv .venv
+
+# 2) Instalează dependențele necesare build-ului (o singură dată):
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install pyinstaller pyqt6 mutagen
+
+# 3) (Opțional) Curăță build-ul anterior înainte de un build nou:
+if exist build rmdir /s /q build
+if exist dist rmdir /s /q dist
+if exist "Stava Player.spec" del /q "Stava Player.spec"
+
+# 4) Generează executabilul (la fiecare build):
+.\.venv\Scripts\python.exe -m PyInstaller --noconfirm --onedir --windowed --icon "icons/Logo.ico" --add-data "icons;icons" --add-data "playlist;playlist" --add-data "player;player" --add-data "libs;libs" --name "Stava Player" main.py
+
+# După acest pas, vei avea folderul 'dist\Stava Player\Stava Player.exe'.
+# Verifică dacă funcționează deschizându-l.
+
+# PASUL 3: CREARE INSTALLER (Inno Setup)
+# --------------------------------------
+# 1. Descarcă și instalează "Inno Setup" (jrsoftware.org).
+# 2. Creează un fișier text nou "setup_script.iss" în folderul proiectului.
+# 3. Copiază conținutul de mai jos în el:
+
+; --- ÎNCEPUT SCRIPT INNO SETUP ---
+[Setup]
+AppName=Stava Player
+AppVersion=1.0
+DefaultDirName={autopf}\Stava Player
+DefaultGroupName=Stava Player
+OutputDir=.
+OutputBaseFilename=Stava_Player_Setup
+Compression=lzma
+SolidCompression=yes
+IconOnFile=icons\Logo.ico
+
+[Files]
+; Copiază tot ce a generat PyInstaller
+Source: "dist\Stava Player\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Icons]
+Name: "{group}\Stava Player"; Filename: "{app}\Stava Player.exe"; IconFilename: "{app}\icons\Logo.ico"
+Name: "{autodesktop}\Stava Player"; Filename: "{app}\Stava Player.exe"; IconFilename: "{app}\icons\Logo.ico"; Tasks: desktopicon
+
+[Tasks]
+Name: "desktopicon"; Description: "Create a &desktop icon"; GroupDescription: "Additional icons:"
+
+[Run]
+Filename: "{app}\Stava Player.exe"; Description: "Launch Stava Player"; Flags: nowait postinstall skipifsilent
+; --- FINAL SCRIPT INNO SETUP ---
+
+# 4. Deschide "setup_script.iss" cu Inno Setup Compiler și apasă "Run" (Play).
+# 5. Vei obține fișierul "Stava_Player_Setup.exe" lângă script. Acesta este installer-ul tău!

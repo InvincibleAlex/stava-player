@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="150"
+   height="150"
+   viewBox="0 0 150 150"
+   fill="none"
+   stroke="currentColor"
+   stroke-width="10"
+   stroke-linecap="round"
+   stroke-linejoin="round"
+   version="1.1"
+   xmlns="http://www.w3.org/2000/svg">
+  <line x1="75" y1="26" x2="75" y2="124" />
+  <path d="M 57 45 C 48 53, 43 63, 43 75 C 43 87, 48 97, 57 105" />
+  <path d="M 93 45 C 102 53, 107 63, 107 75 C 107 87, 102 97, 93 105" />
+  <path d="M 40 32 C 25 45, 17 59, 17 75 C 17 91, 25 105, 40 118" />
+  <path d="M 110 32 C 125 45, 133 59, 133 75 C 133 91, 125 105, 110 118" />
+  <circle cx="75" cy="75" r="14" fill="currentColor" stroke="none" />
+</svg>

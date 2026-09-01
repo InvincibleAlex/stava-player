@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
+
+<svg
+   fill="#000000"
+   version="1.1"
+   id="Layer_1"
+   width="150"
+   height="150"
+   viewBox="0 0 4.5 4.5"
+   enable-background="new 0 0 24 24"
+   xml:space="preserve"
+   sodipodi:docname="menu-circle-dots.svg"
+   inkscape:version="1.4.2 (f4327f4, 2025-05-13)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns:ns="&amp;ns_sfw;"><defs
+   id="defs9" /><sodipodi:namedview
+   id="namedview9"
+   pagecolor="#505050"
+   bordercolor="#ffffff"
+   borderopacity="1"
+   inkscape:showpageshadow="0"
+   inkscape:pageopacity="0"
+   inkscape:pagecheckerboard="1"
+   inkscape:deskcolor="#505050"
+   inkscape:zoom="1.134375"
+   inkscape:cx="207.16253"
+   inkscape:cy="368.92562"
+   inkscape:window-width="3840"
+   inkscape:window-height="2054"
+   inkscape:window-x="-11"
+   inkscape:window-y="-11"
+   inkscape:window-maximized="1"
+   inkscape:current-layer="Layer_1" />
+<metadata
+   id="metadata1">
+	<ns:sfw>
+		<ns:slices>
+
+</ns:slices>
+		<ns:sliceSourceBounds
+   width="505"
+   height="984"
+   bottomLeftOrigin="true"
+   x="0"
+   y="-120">
+
+</ns:sliceSourceBounds>
+	</ns:sfw>
+</metadata>
+<g
+   id="g9"
+   transform="scale(0.1875)">
+	<g
+   id="g2">
+		<g
+   id="g1">
+			<path
+   d="M 12,24 C 5.4,24 0,18.6 0,12 0,5.4 5.4,0 12,0 18.6,0 24,5.4 24,12 24,18.6 18.6,24 12,24 Z M 12,2 C 6.5,2 2,6.5 2,12 2,17.5 6.5,22 12,22 17.5,22 22,17.5 22,12 22,6.5 17.5,2 12,2 Z"
+   id="path1" />
+		</g>
+	</g>
+	<g
+   id="g4">
+		<g
+   id="g3">
+			<circle
+   cx="7"
+   cy="12"
+   r="2"
+   id="circle2" />
+		</g>
+	</g>
+	<g
+   id="g6">
+		<g
+   id="g5">
+			<circle
+   cx="12"
+   cy="12"
+   r="2"
+   id="circle4" />
+		</g>
+	</g>
+	<g
+   id="g8">
+		<g
+   id="g7">
+			<circle
+   cx="17"
+   cy="12"
+   r="2"
+   id="circle6" />
+		</g>
+	</g>
+</g>
+</svg>
