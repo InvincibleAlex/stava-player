@@ -51,6 +51,13 @@ class PlaylistViewManager:
         self._header_art_pool = QThreadPool()
         self._header_art_pool.setMaxThreadCount(2)
 
+        # Debounce pentru căutare: evită un LIKE '%...%' full-scan la fiecare tastă apăsată
+        self._search_debounce_timer = QTimer()
+        self._search_debounce_timer.setSingleShot(True)
+        self._search_debounce_timer.setInterval(200)
+        self._search_debounce_timer.timeout.connect(self._execute_pending_search)
+        self._pending_search_text = ""
+
     def _animate_list_change(self, update_func, total_duration=250):
         """ Execută Fade Out -> Callback -> Fade In pe listă """
         # Oprim animațiile anterioare dacă rulează
@@ -818,8 +825,18 @@ class PlaylistViewManager:
     def on_search_text_changed(self, text):
         if not self.logic.library_root: return
         if not text.strip():
+            # Curățarea căutării trebuie să fie instant, nu are rost să o amânăm.
+            self._search_debounce_timer.stop()
             if self.tab.stack.currentIndex() == 1:
                 self.load_directory_view(self.logic.current_path, animate=False)
+            return
+
+        self._pending_search_text = text
+        self._search_debounce_timer.start()
+
+    def _execute_pending_search(self):
+        text = self._pending_search_text
+        if not text.strip():
             return
 
         if self.tab.stack.currentIndex() == 0:

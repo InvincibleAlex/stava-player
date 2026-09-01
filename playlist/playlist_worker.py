@@ -6,6 +6,11 @@ class LibraryScannerThread(QThread):
     progress_percent = pyqtSignal(int) # Procentaj (0-100)
     scan_finished = pyqtSignal()      # Semnal când e gata
 
+    # Comitem periodic in loc de un commit per fisier (mult mai rapid) SAU
+    # un singur commit gigant pentru tot scanul (ar tine tranzactia deschisa
+    # minute intregi si ar bloca orice scriere venita din UI thread).
+    COMMIT_CHUNK_SIZE = 300
+
     def __init__(self, logic, audio_engine=None, scan_root=None):
         super().__init__()
         self.logic = logic
@@ -28,37 +33,46 @@ class LibraryScannerThread(QThread):
         
         # --- ETAPA 1: METADATE (Rapid) ---
         self.progress_update.emit("Step 1/3: Scanning Metadata...")
+        self.logic.db.begin_transaction()
         try:
-            self.logic.db.begin_transaction()
             for i, f in enumerate(files):
                 if not self.is_running: break
                 self.logic.scan_metadata(f)
-                if i % 50 == 0: 
+                if (i + 1) % self.COMMIT_CHUNK_SIZE == 0:
+                    self.logic.db.commit_transaction()
+                    self.logic.db.begin_transaction()
+                if i % 50 == 0:
                     self.progress_update.emit(f"Step 1/3: Metadata ({i}/{total})")
                     percent = int((i / total) * 100)
                     self.progress_percent.emit(percent)
-            self.logic.db.commit_transaction()
         except Exception as e: print(f"Meta Scan Error: {e}")
+        finally:
+            self.logic.db.commit_transaction()
 
         # --- ETAPA 2: ARTWORK (Mediu) ---
         self.progress_update.emit("Step 2/3: Processing Artwork & Miniatures...")
+        self.logic.db.begin_transaction()
         try:
-            self.logic.db.begin_transaction()
             for i, f in enumerate(files):
                 if not self.is_running: break
                 self.logic.scan_artwork(f)
-                if i % 20 == 0: 
+                if (i + 1) % self.COMMIT_CHUNK_SIZE == 0:
+                    self.logic.db.commit_transaction()
+                    self.logic.db.begin_transaction()
+                if i % 20 == 0:
                     self.progress_update.emit(f"Step 2/3: Artwork ({i}/{total})")
                     percent = int((i / total) * 100)
                     self.progress_percent.emit(percent)
-            self.logic.db.commit_transaction()
         except Exception as e: print(f"Art Scan Error: {e}")
+        finally:
+            self.logic.db.commit_transaction()
 
         # --- ETAPA 3: WAVEFORM (Lent) ---
         self.progress_update.emit("Step 3/3: Generating Waveforms...")
+        self.logic.db.begin_transaction()
         try:
             processed_wave_sources = set()
-            self.logic.db.begin_transaction()
+            pending = 0
             for i, f in enumerate(files):
                 if not self.is_running: break
                 source = PlaylistScanner.resolve_audio_path(f)
@@ -66,14 +80,18 @@ class LibraryScannerThread(QThread):
                     continue
                 processed_wave_sources.add(source)
                 self.logic.scan_waveform(f, self.audio_engine)
-                if i % 10 == 0: 
+                pending += 1
+                if pending % self.COMMIT_CHUNK_SIZE == 0:
+                    self.logic.db.commit_transaction()
+                    self.logic.db.begin_transaction()
+                if i % 10 == 0:
                     self.progress_update.emit(f"Step 3/3: Waveforms ({i}/{total})")
                     percent = int((i / total) * 100)
                     self.progress_percent.emit(percent)
-            
-            self.logic.db.commit_transaction()
         except Exception as e:
             print(f"Scan Error: {e}")
+        finally:
+            self.logic.db.commit_transaction()
         
         self.progress_update.emit(f"Library Ready ({total} songs)")
         self.progress_percent.emit(100)

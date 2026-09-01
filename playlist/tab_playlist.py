@@ -152,7 +152,13 @@ class PlaylistTab(QWidget):
     def _remove_mouse_navigation_filter(self):
         app = QApplication.instance()
         if app and self._mouse_nav_filter_installed:
-            app.removeEventFilter(self)
+            try:
+                app.removeEventFilter(self)
+            except RuntimeError:
+                # Widget-ul e deja distrus la nivel C++ (semnalul destroyed a
+                # pornit exact acest cleanup) - Qt scoate deja filtrul automat
+                # in acest caz, deci nu mai avem ce sa facem aici.
+                pass
         self._mouse_nav_filter_installed = False
         return
         

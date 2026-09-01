@@ -4,6 +4,19 @@ import shutil
 import signal
 import time
 import re
+
+# Pe Windows, cand stdout/stderr e redirectat (fisier, pipe, consola veche),
+# Python foloseste encoding-ul local (ex. cp1252) in loc de UTF-8. Orice print()
+# cu diacritice (titluri de piese, nume de fisiere) crapa cu UnicodeEncodeError.
+# Fortam UTF-8 aici, cat mai devreme, ca sa evitam asta peste tot in aplicatie.
+for _stream in (sys.stdout, sys.stderr):
+    if _stream is None:
+        continue
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 from PyQt6.QtWidgets import QApplication, QMainWindow, QDialog, QWidget, QVBoxLayout, QLabel
 from PyQt6.QtCore import QObject, QEvent, QTimer, Qt, QProcess, qInstallMessageHandler
 from PyQt6.QtGui import QIcon  

@@ -5,6 +5,7 @@ class DatabaseManager:
     def __init__(self, cache_dir, db_name="stava_library.db"):
         self.db_path = os.path.join(cache_dir, db_name)
         self.conn = None
+        self._in_manual_transaction = False
         self.connect()
 
     def connect(self):
@@ -61,7 +62,20 @@ class DatabaseManager:
         )
         """
         self.execute(query_songs)
-        
+
+        # 3. Tabel QUEUE_STATE
+        # Coada de redare (queue / shuffled_queue), salvata aici in loc de QSettings,
+        # unde toata lista era salvata ca un singur string uriaș la fiecare pornire.
+        query_queue = """
+        CREATE TABLE IF NOT EXISTS queue_state (
+            queue_name TEXT NOT NULL,
+            position INTEGER NOT NULL,
+            path TEXT NOT NULL,
+            PRIMARY KEY (queue_name, position)
+        )
+        """
+        self.execute(query_queue)
+
         # Migrare pentru tabele existente (dacă coloana lipsește)
         # Verificăm întâi dacă există coloana pentru a evita eroarea în consolă
         cursor = self.execute("PRAGMA table_info(songs)")
@@ -93,6 +107,11 @@ class DatabaseManager:
     def execute(self, query, params=()):
         """ Execută o comandă (INSERT, UPDATE, DELETE, CREATE) """
         try:
+            if self._in_manual_transaction:
+                # O tranzacție manuală e deschisă (begin_transaction) - NU facem
+                # auto-commit per apel, altfel anulăm batching-ul (fiecare rând ar
+                # deveni propriul lui commit pe disc).
+                return self.conn.execute(query, params)
             with self.conn: # Auto-commit
                 cursor = self.conn.execute(query, params)
                 return cursor
@@ -121,10 +140,33 @@ class DatabaseManager:
     def begin_transaction(self):
         """ Începe o tranzacție manuală (pentru bulk inserts) """
         self.conn.execute("BEGIN TRANSACTION")
+        self._in_manual_transaction = True
 
     def commit_transaction(self):
         """ Comite tranzacția manuală """
+        self._in_manual_transaction = False
         self.conn.commit()
+
+    def save_queue(self, queue_name, paths):
+        """ Salvează o coadă ordonată (queue/shuffled_queue) într-un singur commit. """
+        self.begin_transaction()
+        try:
+            self.execute("DELETE FROM queue_state WHERE queue_name = ?", (queue_name,))
+            for i, path in enumerate(paths):
+                self.execute(
+                    "INSERT INTO queue_state (queue_name, position, path) VALUES (?, ?, ?)",
+                    (queue_name, i, path)
+                )
+        finally:
+            self.commit_transaction()
+
+    def load_queue(self, queue_name):
+        """ Returnează coada salvată (listă de căi, în ordine) """
+        rows = self.fetch_all(
+            "SELECT path FROM queue_state WHERE queue_name = ? ORDER BY position",
+            (queue_name,)
+        )
+        return [row['path'] for row in rows]
 
     def close(self):
         if self.conn:

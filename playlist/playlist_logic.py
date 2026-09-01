@@ -327,9 +327,10 @@ class PlaylistLogic:
         # 2. SQL Aggregation (Dacă piesele sunt deja scanate în songs)
         # Căutăm toate piesele care încep cu calea folderului
         # Atenție: Asta include și subfoldere, ceea ce e corect pentru stats recursive
-        like_path = f"{folder_path}%"
+        # Separatorul de path e obligatoriu aici, altfel "Rock%" prinde si "Rock2\..."
+        like_path = f"{folder_path}{os.sep}%"
         agg = self.db.fetch_one("SELECT COUNT(*), SUM(duration) FROM songs WHERE path LIKE ?", (like_path,))
-        
+
         db_count = agg[0] if agg else 0
         db_duration = agg[1] if agg and agg[1] else 0
         
@@ -358,7 +359,7 @@ class PlaylistLogic:
         if row and row['song_count'] is not None:
             return row['song_count'] or 0, row['total_duration'] or 0
 
-        like_path = f"{folder_path}%"
+        like_path = f"{folder_path}{os.sep}%"
         agg = self.db.fetch_one("SELECT COUNT(*), SUM(duration) FROM songs WHERE path LIKE ?", (like_path,))
         db_count = agg[0] if agg else 0
         db_duration = agg[1] if agg and agg[1] else 0

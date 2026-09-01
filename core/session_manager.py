@@ -47,16 +47,13 @@ class SessionManager:
         self.main.ui_player.btn_repeat.current_index = saved_repeat
         self.main.ui_player.btn_repeat.refresh_look()
 
-        saved_queue = self.settings.value("queue")
-        saved_shuffled_queue = self.settings.value("shuffled_queue")
         last_song = self.settings.value("last_song", "")
         last_pos = self.settings.value("last_position", 0.0, type=float)
 
         if hasattr(self.main, 'ui_playlist') and hasattr(self.main.ui_playlist, 'logic'):
             self.main.ui_playlist.logic.migrate_cue_virtual_entries()
 
-        parsed_queue = self._parse_list(saved_queue)
-        parsed_shuffled = self._parse_list(saved_shuffled_queue)
+        parsed_queue, parsed_shuffled = self._load_queues()
 
         if parsed_queue:
             self.main.qm.queue = PlaylistScanner.canonicalize_track_list([str(x) for x in parsed_queue if x])
@@ -70,8 +67,7 @@ class SessionManager:
             self.main.ui_player.toggle_waveform_mode(saved_wave_mode)
 
         last_song = self._normalize_track_path(last_song)
-        self.settings.setValue("queue", self.main.qm.queue)
-        self.settings.setValue("shuffled_queue", self.main.qm.shuffled_queue)
+        self._save_queues(self.main.qm.queue, self.main.qm.shuffled_queue)
         self.settings.setValue("last_song", last_song)
         if last_song and self._playback_path_exists(last_song):
             self.main.current_path = last_song
@@ -225,11 +221,40 @@ class SessionManager:
         self.main.qm.shuffled_queue = normalized_shuffled
         self.main.current_path = normalized_current
 
-        self.settings.setValue("queue", normalized_queue)
-        self.settings.setValue("shuffled_queue", normalized_shuffled)
+        self._save_queues(normalized_queue, normalized_shuffled)
         self.settings.setValue("last_song", normalized_current)
         pos, _ = self.main.audio.get_position_info()
         self.settings.setValue("last_position", pos)
+
+    def _get_playlist_db(self):
+        logic = getattr(getattr(self.main, 'ui_playlist', None), 'logic', None)
+        return getattr(logic, 'db', None) if logic else None
+
+    def _load_queues(self):
+        """ Încarcă queue/shuffled_queue din DB; migrează o singură dată din
+        vechile chei QSettings (string uriaș în settings.ini) dacă DB-ul e gol. """
+        db = self._get_playlist_db()
+        if not db:
+            return self._parse_list(self.settings.value("queue")), self._parse_list(self.settings.value("shuffled_queue"))
+
+        queue = db.load_queue("queue")
+        shuffled = db.load_queue("shuffled_queue")
+
+        if not queue and not shuffled and (self.settings.contains("queue") or self.settings.contains("shuffled_queue")):
+            # Migrare unică din formatul vechi (QSettings) către tabelul DB
+            queue = self._parse_list(self.settings.value("queue"))
+            shuffled = self._parse_list(self.settings.value("shuffled_queue"))
+            self.settings.remove("queue")
+            self.settings.remove("shuffled_queue")
+
+        return queue, shuffled
+
+    def _save_queues(self, queue, shuffled_queue):
+        db = self._get_playlist_db()
+        if not db:
+            return
+        db.save_queue("queue", queue)
+        db.save_queue("shuffled_queue", shuffled_queue)
 
     def _parse_list(self, val):
         if isinstance(val, list): return val
