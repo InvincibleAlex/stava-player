@@ -24,6 +24,24 @@ class _HeaderArtLoadJob(QRunnable):
         image = QImage(self.art_path) if self.art_path and os.path.exists(self.art_path) else QImage()
         self.signals.loaded.emit(self.request_id, self.art_path or "", image, self.update_background)
 
+class _FolderScanSignals(QObject):
+    finished = pyqtSignal(list)
+
+
+class _FolderScanJob(QRunnable):
+    """ Scaneaza recursiv un folder (os.walk + citire CUE/mutagen) pe un
+    thread separat, ca "Play folder"/"Queue folder" sa nu inghete UI-ul
+    pentru foldere mari. """
+    def __init__(self, path):
+        super().__init__()
+        self.path = path
+        self.signals = _FolderScanSignals()
+
+    def run(self):
+        files = PlaylistScanner.get_all_songs_recursive(self.path)
+        self.signals.finished.emit(files)
+
+
 class PlaylistViewManager:
     def __init__(self, tab):
         """ 
@@ -50,6 +68,11 @@ class PlaylistViewManager:
         self._no_deferred_background_update = self._deferred_background_update
         self._header_art_pool = QThreadPool()
         self._header_art_pool.setMaxThreadCount(2)
+
+        # Pool separat pentru scanarea recursiva de foldere (Play/Queue folder),
+        # ca sa nu concureze cu incarcarea artwork-ului din header.
+        self._folder_scan_pool = QThreadPool()
+        self._folder_scan_pool.setMaxThreadCount(1)
 
         # Debounce pentru căutare: evită un LIKE '%...%' full-scan la fiecare tastă apăsată
         self._search_debounce_timer = QTimer()
@@ -947,14 +970,33 @@ class PlaylistViewManager:
         if action:
             path = item.data(Qt.ItemDataRole.UserRole)
             type_ = item.data(Qt.ItemDataRole.UserRole + 1)
+            is_play = (action == act_play)
+
+            if type_ == "dir":
+                # Foldere mari pot avea sute de fisiere - scanam pe un thread
+                # separat in loc sa inghetam UI-ul cat timp asteapta userul.
+                job = _FolderScanJob(path)
+                job.signals.finished.connect(
+                    lambda files, is_play=is_play: self._on_folder_scan_finished(files, is_play)
+                )
+                self._folder_scan_pool.start(job)
+                return
+
             files = self._get_files_from_item(path, type_)
-            
+
             if not files: return
-            
-            if action == act_play:
+
+            if is_play:
                 self.tab.play_files_requested.emit(files)
-            elif action == act_queue:
+            else:
                 self.tab.add_to_queue_requested.emit(files)
+
+    def _on_folder_scan_finished(self, files, is_play):
+        if not files: return
+        if is_play:
+            self.tab.play_files_requested.emit(files)
+        else:
+            self.tab.add_to_queue_requested.emit(files)
 
     def _get_files_from_item(self, path, type_):
         """ Returnează lista de fișiere audio asociată elementului selectat """

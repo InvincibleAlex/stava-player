@@ -94,6 +94,12 @@ class PlaylistTabNavigator:
             folder_leaving = self.tab.logic.current_path
             parent = self.tab.logic.get_parent_directory()
             if parent:
+                # Imaginea corecta pentru header-ul la care ne intoarcem a fost
+                # deja retinuta cand am intrat in acest folder (vezi
+                # _handle_directory_click) - o scoatem de pe stack aici, o
+                # singura data, indiferent pe ce ramura mergem mai jos.
+                incoming_header_pix = self._pop_header_pixmap()
+
                 if self.tab.anim_manager and header_pix and parent == self.tab.logic.library_root:
                     self.tab.view_manager.defer_background_updates()
                     self.tab.animations.animate_browser_back_to_root(
@@ -105,6 +111,7 @@ class PlaylistTabNavigator:
                         header_pix=header_pix,
                         folder_leaving=folder_leaving,
                         header_rect=header_rect,
+                        incoming_header_pix=incoming_header_pix,
                     )
                 elif self.tab.anim_manager and header_pix:
                     self.tab.view_manager.defer_background_updates()
@@ -117,6 +124,7 @@ class PlaylistTabNavigator:
                         header_pix=header_pix,
                         folder_leaving=folder_leaving,
                         header_rect=header_rect,
+                        incoming_header_pix=incoming_header_pix,
                     )
                 else:
                     self.tab.view_manager.load_directory_view(parent, target_file=folder_leaving)
@@ -126,23 +134,47 @@ class PlaylistTabNavigator:
 
         self.go_to_dashboard()
 
+    def _push_header_pixmap(self, pixmap):
+        stack = getattr(self.tab, '_header_pixmap_stack', None)
+        if stack is None:
+            stack = []
+            self.tab._header_pixmap_stack = stack
+        stack.append(pixmap)
+
+    def _pop_header_pixmap(self):
+        stack = getattr(self.tab, '_header_pixmap_stack', None)
+        if not stack:
+            return None
+        return stack.pop()
+
     def go_to_dashboard(self, reset_history=False):
-        self.tab.view_mode = "dashboard"
-        self.tab._disable_drag_drop()
+        def navigate():
+            self.tab.view_mode = "dashboard"
+            self.tab._disable_drag_drop()
 
-        if reset_history and self.tab.logic.library_root:
-            self.tab.logic.current_path = self.tab.logic.library_root
-            self.tab.logic.forward_stack = []
+            # Iesim din ierarhia de foldere - orice imagini de header retinute
+            # pentru un "back" ulterior nu mai au sens (am putea reintra pe alt
+            # traseu), le golim ca sa nu ramana date vechi pe stack.
+            self.tab._header_pixmap_stack = []
 
-        self.tab.stack.setCurrentIndex(0)
-        self.tab.btn_back.hide()
-        self.tab.btn_play_folder.hide()
-        self.tab.btn_shuffle_folder.hide()
-        self.tab.ui.header.set_image(None)
-        self.tab.nav_container.hide()
-        self.tab.ui.header.set_compact(True)
-        self.tab.page2_header.hide()
-        self.tab.background_update_requested.emit(None)
+            if reset_history and self.tab.logic.library_root:
+                self.tab.logic.current_path = self.tab.logic.library_root
+                self.tab.logic.forward_stack = []
+
+            self.tab.stack.setCurrentIndex(0)
+            self.tab.btn_back.hide()
+            self.tab.btn_play_folder.hide()
+            self.tab.btn_shuffle_folder.hide()
+            self.tab.ui.header.set_image(None)
+            self.tab.nav_container.hide()
+            self.tab.ui.header.set_compact(True)
+            self.tab.page2_header.hide()
+            self.tab.background_update_requested.emit(None)
+
+        # Acelasi fade folosit si la intrarea in sectiuni - se aplica la
+        # intoarcerea din oricare dintre ele (Folders, All Songs, Albums,
+        # Artists, Most Replayed, Queue) inapoi la dashboard.
+        self.tab.animations.animate_playlist_page_switch(navigate, target_widget=self.tab.page_dashboard)
 
     def go_forward(self):
         path = self.tab.logic.get_forward_directory()
@@ -397,6 +429,12 @@ class PlaylistTabNavigator:
 
             if not entering_from_root:
                 previous_header_pixmap = self._capture_current_header_pixmap()
+                # Retinem aceasta imagine pentru cand se revine la acest nivel
+                # (go_back) - header-ul isi incarca imaginea asincron, deci daca
+                # am recaptura-o abia la intoarcere, am prinde-o adesea neincarcata
+                # inca (se vedea imaginea gresita o clipa, apoi un salt instant).
+                if previous_header_pixmap and not previous_header_pixmap.isNull():
+                    self._push_header_pixmap(previous_header_pixmap)
 
             if self.tab.logic.navigate_to(path):
                 if start_rect and pixmap and self.tab.anim_manager:

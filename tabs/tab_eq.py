@@ -497,12 +497,12 @@ class EqTab(QWidget):
         lbl_pre = QLabel("PRE")
         self.lbl_pre = lbl_pre
         lbl_pre.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl_pre.setStyleSheet("font-size: 10px; font-weight: bold;") # Text mai mic
-        lbl_pre.setFixedHeight(15) # Înălțime fixă mică
+        lbl_pre.setStyleSheet("font-size: 13px; font-weight: bold;")
+        lbl_pre.setFixedHeight(17)
         self.lbl_pre_val = QLabel("0")
         self.lbl_pre_val.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_pre_val.setStyleSheet("font-size: 11px; font-weight: bold;")
-        self.lbl_pre_val.setFixedHeight(15) # Înălțime fixă mică
+        self.lbl_pre_val.setStyleSheet("font-size: 14px; font-weight: bold;")
+        self.lbl_pre_val.setFixedHeight(17)
         self.slider_preamp.valueChanged.connect(self.on_preamp_change)
 
         preamp_layout.addWidget(self.slider_preamp)
@@ -676,10 +676,10 @@ class EqTab(QWidget):
         self.nav_dummy.setFixedSize(int(60 * z), int(34 * z))
 
         if hasattr(self, 'lbl_pre'):
-            self.lbl_pre.setFixedHeight(max(12, int(15 * z)))
-            self.lbl_pre.setStyleSheet(f"font-size: {max(8, int(10 * z))}px; font-weight: bold;")
-        self.lbl_pre_val.setFixedHeight(max(12, int(15 * z)))
-        self.lbl_pre_val.setStyleSheet(f"font-size: {max(9, int(11 * z))}px; font-weight: bold;")
+            self.lbl_pre.setFixedHeight(max(14, int(17 * z)))
+            self.lbl_pre.setStyleSheet(f"font-size: {max(11, int(13 * z))}px; font-weight: bold;")
+        self.lbl_pre_val.setFixedHeight(max(14, int(17 * z)))
+        self.lbl_pre_val.setStyleSheet(f"font-size: {max(12, int(14 * z))}px; font-weight: bold;")
 
         self.slider_preamp.setMinimumHeight(max(20, int(30 * z)))
 
@@ -694,9 +694,9 @@ class EqTab(QWidget):
                 cur = lbl.styleSheet() or ""
                 if "font-size" in cur:
                     if "font-weight: bold" in cur:
-                        lbl.setStyleSheet(f"font-size: {max(9, int(12 * z))}px; font-weight: bold;")
+                        lbl.setStyleSheet(f"font-size: {max(12, int(15 * z))}px; font-weight: bold;")
                     else:
-                        lbl.setStyleSheet(f"font-size: {max(8, int(10 * z))}px;")
+                        lbl.setStyleSheet(f"font-size: {max(11, int(13 * z))}px;")
 
         for knob in self.findChildren(AudioKnob):
             knob.set_zoom_factor(z)
@@ -800,7 +800,7 @@ class EqTab(QWidget):
         if hasattr(self, 'btn_reverb'): self.btn_reverb.setStyleSheet(btn_style)
         
         # Actualizăm culoarea textului pentru label-uri (păstrând dimensiunea)
-        pre_size = max(9, int(11 * self.global_zoom))
+        pre_size = max(12, int(14 * self.global_zoom))
         self.lbl_pre_val.setStyleSheet(f"font-size: {pre_size}px; font-weight: bold; color: {fg_color};")
         
         # Notă: Label-urile din loop (benzile) moștenesc culoarea din QWidget global, 
@@ -867,19 +867,19 @@ class EqTab(QWidget):
                 container.setSpacing(10)
                 
                 lbl_freq = QLabel(freq_lbl)
-                lbl_freq.setFixedWidth(40)
+                lbl_freq.setFixedWidth(46)
                 lbl_freq.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                lbl_freq.setStyleSheet("font-size: 12px; font-weight: bold;")
-                
+                lbl_freq.setStyleSheet("font-size: 15px; font-weight: bold;")
+
                 slider = EqBandSlider(Qt.Orientation.Horizontal)
                 slider.setRange(-24, 24)
                 slider.setValue(0)
                 slider.setFixedHeight(30)
-                
+
                 lbl_val = QLabel("0")
-                lbl_val.setFixedWidth(30)
+                lbl_val.setFixedWidth(34)
                 lbl_val.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                lbl_val.setStyleSheet("font-size: 12px;")
+                lbl_val.setStyleSheet("font-size: 13px;")
                 
                 slider._lbl_val_ref = lbl_val
                 container.addWidget(lbl_freq)
@@ -891,7 +891,7 @@ class EqTab(QWidget):
                 # [Slider Vertical]
                 # [Freq Label]
                 # [Value Label]
-                band_wrapper.setMinimumWidth(45)
+                band_wrapper.setMinimumWidth(52)
                 band_wrapper.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
                 
                 container = QVBoxLayout(band_wrapper)
@@ -906,13 +906,13 @@ class EqTab(QWidget):
                 
                 lbl_freq = QLabel(freq_lbl)
                 lbl_freq.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                lbl_freq.setStyleSheet("font-size: 9px;")
-                lbl_freq.setFixedHeight(15)
-                
+                lbl_freq.setStyleSheet("font-size: 13px;")
+                lbl_freq.setFixedHeight(18)
+
                 lbl_val = QLabel("0")
                 lbl_val.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                lbl_val.setStyleSheet("font-size: 10px;")
-                lbl_val.setFixedHeight(15)
+                lbl_val.setStyleSheet("font-size: 13px;")
+                lbl_val.setFixedHeight(18)
                 
                 slider._lbl_val_ref = lbl_val
                 container.addWidget(slider)

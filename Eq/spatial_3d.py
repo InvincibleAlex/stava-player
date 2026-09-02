@@ -212,8 +212,8 @@ class Spatial3DPage(QWidget):
         """
         self.btn_stereo_enable.setStyleSheet(btn_style)
 
-        self.lbl_stereo.setStyleSheet(f"font-size: 12px; color: {fg};")
+        self.lbl_stereo.setStyleSheet(f"font-size: 14px; color: {fg};")
 
     def set_zoom_factor(self, factor):
         z = max(0.6, float(factor))
-        self.lbl_stereo.setStyleSheet(f"font-size: {max(10, int(12 * z))}px;")
+        self.lbl_stereo.setStyleSheet(f"font-size: {max(12, int(14 * z))}px;")

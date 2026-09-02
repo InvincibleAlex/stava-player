@@ -8,6 +8,7 @@ from PyQt6.QtGui import QIcon, QColor
 import core.themes as themes
 from Eq.knobs import AudioKnob
 from core.utils import IconHelper, get_cache_root, get_settings_path
+from playlist.playlist_scanner import PlaylistScanner
 
 class SettingsTab(QWidget):
     theme_changed = pyqtSignal(str) 
@@ -40,6 +41,41 @@ class SettingsTab(QWidget):
         self._zoom_emit_timer.setInterval(60)
         self._zoom_emit_timer.timeout.connect(self._emit_pending_zoom)
         self.init_ui()
+
+    def _collect_library_versions(self):
+        """ Citeste versiunile bibliotecilor folosite, cu fallback daca una
+        lipseste sau nu isi expune versiunea. """
+        versions = {
+            "qt": "?", "pyqt": "?", "mutagen": "?",
+            "pillow": "?", "pypresence": "?", "sqlite": "?",
+        }
+        try:
+            from PyQt6.QtCore import QT_VERSION_STR, PYQT_VERSION_STR
+            versions["qt"] = QT_VERSION_STR
+            versions["pyqt"] = PYQT_VERSION_STR
+        except Exception:
+            pass
+        try:
+            import mutagen
+            versions["mutagen"] = mutagen.version_string
+        except Exception:
+            pass
+        try:
+            import PIL
+            versions["pillow"] = PIL.__version__
+        except Exception:
+            pass
+        try:
+            import pypresence
+            versions["pypresence"] = getattr(pypresence, "__version__", "instalat")
+        except Exception:
+            versions["pypresence"] = "neinstalat"
+        try:
+            import sqlite3
+            versions["sqlite"] = sqlite3.sqlite_version
+        except Exception:
+            pass
+        return versions
 
     def init_ui(self):
         root_layout = QVBoxLayout(self)
@@ -156,7 +192,7 @@ class SettingsTab(QWidget):
         ):
             row = QHBoxLayout()
             row.setSpacing(10)
-            row.addWidget(label)
+            row.addWidget(label, 0, Qt.AlignmentFlag.AlignVCenter)
             row.addWidget(knob, 1)
             overscroll_layout.addLayout(row)
 
@@ -164,30 +200,39 @@ class SettingsTab(QWidget):
 
         row_theme = QHBoxLayout()
         row_theme.setSpacing(10)
-        row_theme.addWidget(self.lbl_theme)
-        row_theme.addWidget(self.combo_theme)
+        row_theme.addWidget(self.lbl_theme, 0, Qt.AlignmentFlag.AlignVCenter)
+        row_theme.addWidget(self.combo_theme, 0, Qt.AlignmentFlag.AlignVCenter)
         row_theme.addStretch(1)
 
         self.lbl_zoom = QLabel("🔍 Zoom Aplicație:")
         self.lbl_zoom.setStyleSheet("font-weight: bold;")
         row_zoom = QHBoxLayout()
         row_zoom.setSpacing(10)
-        row_zoom.addWidget(self.lbl_zoom)
+        row_zoom.addWidget(self.lbl_zoom, 0, Qt.AlignmentFlag.AlignVCenter)
         row_zoom.addWidget(self.knob_zoom, 1)
-        
+
         self.lbl_fft = QLabel("📊 Densitate FFT:")
         self.lbl_fft.setStyleSheet("font-weight: bold;")
         row_fft = QHBoxLayout()
         row_fft.setSpacing(10)
-        row_fft.addWidget(self.lbl_fft)
+        row_fft.addWidget(self.lbl_fft, 0, Qt.AlignmentFlag.AlignVCenter)
         row_fft.addWidget(self.knob_fft, 1)
 
         self.lbl_animation_speed = QLabel("🎬 Viteză Animații:")
         self.lbl_animation_speed.setStyleSheet("font-weight: bold;")
         row_animation_speed = QHBoxLayout()
         row_animation_speed.setSpacing(10)
-        row_animation_speed.addWidget(self.lbl_animation_speed)
+        row_animation_speed.addWidget(self.lbl_animation_speed, 0, Qt.AlignmentFlag.AlignVCenter)
         row_animation_speed.addWidget(self.knob_animation_speed, 1)
+
+        # Aliniem etichetele la aceeasi latime (cea mai lunga dintre ele), ca
+        # toate knob-urile sa porneasca din acelasi loc pe orizontala - altfel
+        # fiecare rand are propriul QHBoxLayout, iar un text mai lung ("Viteza
+        # Animatii:") impinge knob-ul lui mai la dreapta decat celelalte.
+        aspect_labels = (self.lbl_theme, self.lbl_zoom, self.lbl_fft, self.lbl_animation_speed)
+        label_width = max(lbl.sizeHint().width() for lbl in aspect_labels)
+        for lbl in aspect_labels:
+            lbl.setMinimumWidth(label_width)
 
         app_layout.addLayout(row_theme)
         app_layout.addLayout(row_zoom)
@@ -208,7 +253,6 @@ class SettingsTab(QWidget):
         self.knob_bands.setValue(10)
         self.knob_bands.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         
-        self.lbl_bands_val = QLabel("10 Bands")
         self.knob_bands.value_changed.connect(self.on_bands_change)
 
         self.knob_bass_range = AudioKnob("BASS RANGE", 0, 500, step=1.0, orientation='horizontal', format_str="{:.0f} Hz")
@@ -222,10 +266,23 @@ class SettingsTab(QWidget):
         self.knob_treble_range.value_changed.connect(self.on_treble_range_change)
         
         audio_layout.addRow("Număr Benzi EQ:", self.knob_bands)
-        audio_layout.addRow("", self.lbl_bands_val)
         audio_layout.addRow("Bass Interval (0..X):", self.knob_bass_range)
         audio_layout.addRow("Treble Interval (X..20000):", self.knob_treble_range)
-        
+
+        # Toate knob-urile din Settings au deja o eticheta externa (randul din
+        # care fac parte), deci ascundem titlul propriu al knob-ului (ex.
+        # "ZOOM", "ANIM SPEED") si pastram doar valoarea - evita repetarea
+        # textului si taierea titlurilor lungi intr-un container ingust.
+        for knob in (
+            self.knob_zoom, self.knob_fft, self.knob_animation_speed,
+            self.knob_playlist_overscroll_max, self.knob_playlist_overscroll_global,
+            self.knob_playlist_overscroll_spread, self.knob_playlist_overscroll_falloff,
+            self.knob_playlist_overscroll_return,
+            self.knob_bands, self.knob_bass_range, self.knob_treble_range,
+        ):
+            knob.set_title_visible(False)
+
+
         group_audio.setLayout(audio_layout)
         self.group_audio = group_audio
 
@@ -345,7 +402,12 @@ class SettingsTab(QWidget):
         info_layout = QVBoxLayout()
         info_layout.setSpacing(10)
 
-        self.lbl_info_summary = QLabel("")
+        self.lbl_info_summary = QLabel(
+            "STAVA Player — player audio pentru biblioteci muzicale locale. Redare prin "
+            "motorul nativ BASS, equalizer parametric cu benzi configurabile, efecte "
+            "spațiale și reverb, waveform, versuri sincronizate (LRC), Discord Rich "
+            "Presence și integrare cu tastele media ale sistemului."
+        )
         self.lbl_info_summary.setWordWrap(True)
 
         info_grid = QFormLayout()
@@ -354,39 +416,81 @@ class SettingsTab(QWidget):
         info_grid.setHorizontalSpacing(16)
         info_grid.setVerticalSpacing(8)
 
-        self.lbl_info_version_label = QLabel("Versiune:")
-        self.lbl_info_version_value = QLabel("1.0")
-        self.lbl_info_runtime_label = QLabel("Runtime:")
-        self.lbl_info_runtime_value = QLabel(f"Python {platform.python_version()} • {platform.system()}")
-        self.lbl_info_theme_label = QLabel("Teme disponibile:")
-        self.lbl_info_theme_value = QLabel(", ".join(list(themes.THEME_PALETTES.keys())))
-        self.lbl_info_settings_label = QLabel("Settings file:")
-        self.lbl_info_settings_value = QLabel(get_settings_path())
-        self.lbl_info_settings_value.setWordWrap(True)
-        self.lbl_info_cache_label = QLabel("Cache folder:")
-        self.lbl_info_cache_value = QLabel(get_cache_root())
-        self.lbl_info_cache_value.setWordWrap(True)
-        self.lbl_info_project_label = QLabel("Project root:")
-        self.lbl_info_project_value = QLabel(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        self.lbl_info_project_value.setWordWrap(True)
+        # Versiunile bibliotecilor sunt citite dinamic, cu fallback daca lipsesc.
+        versions = self._collect_library_versions()
 
-        info_grid.addRow(self.lbl_info_version_label, self.lbl_info_version_value)
-        info_grid.addRow(self.lbl_info_runtime_label, self.lbl_info_runtime_value)
-        info_grid.addRow(self.lbl_info_theme_label, self.lbl_info_theme_value)
-        info_grid.addRow(self.lbl_info_settings_label, self.lbl_info_settings_value)
-        info_grid.addRow(self.lbl_info_cache_label, self.lbl_info_cache_value)
-        info_grid.addRow(self.lbl_info_project_label, self.lbl_info_project_value)
+        self._info_label_widgets = []
+        self._info_value_widgets = []
 
-        self.lbl_info_note = QLabel(
-            f"Build local curent: {sys.executable}. Informațiile din această secțiune sunt doar informative și nu schimbă setările aplicației."
+        def add_info_row(label_text, value_text, wrap=False):
+            lbl = QLabel(label_text)
+            val = QLabel(str(value_text))
+            val.setWordWrap(wrap)
+            self._info_label_widgets.append(lbl)
+            self._info_value_widgets.append(val)
+            info_grid.addRow(lbl, val)
+            return val
+
+        audio_ext = ", ".join(ext.lstrip(".") for ext in PlaylistScanner.AUDIO_EXT)
+        cue_ext = ", ".join(ext.lstrip(".") for ext in PlaylistScanner.CUE_EXT)
+
+        add_info_row("Versiune:", "1.0")
+        add_info_row("Runtime:", f"Python {platform.python_version()} • {platform.system()} {platform.release()}")
+        add_info_row("Interfață:", f"PyQt {versions['pyqt']} (Qt {versions['qt']})")
+        add_info_row("Bibliotecă audio:", "BASS (un4seen) — bass.dll / libbass")
+        add_info_row("Extensii audio:", "BASS_FX (tempo, reverb) • BASSFLAC (FLAC) • BASS_VST (plugin-uri VST)")
+        add_info_row("Plugin VST:", "Wider — extindere stereo")
+        add_info_row("Formate redate:", f"{audio_ext} (+ playlist-uri {cue_ext})")
+        add_info_row("Metadata / tag-uri:", f"Mutagen {versions['mutagen']}")
+        add_info_row("Procesare imagini:", f"Pillow {versions['pillow']}")
+        add_info_row("Discord:", f"pypresence {versions['pypresence']}")
+        add_info_row("Bază de date:", f"SQLite {versions['sqlite']} (bibliotecă, statistici, cozi)")
+
+        self.lbl_info_licenses_title = QLabel("Licențe și atribuiri")
+        self.lbl_info_licenses = QLabel(
+            "• BASS, BASS_FX, BASSFLAC, BASS_VST — © un4seen developments. Gratuite pentru "
+            "uz necomercial; distribuția comercială necesită licență de la un4seen.\n"
+            "• Qt / PyQt6 — Qt sub LGPL v3, PyQt6 sub GPL v3 sau licență comercială Riverbank.\n"
+            "• Mutagen — GPL v2 sau ulterior.\n"
+            "• Pillow — licență MIT-CMU (HPND).\n"
+            "• pypresence — licență MIT.\n"
+            "• Wider (VST) — proprietatea autorului său; inclus doar ca plugin extern.\n\n"
+            "Coperțile, versurile și metadatele aparțin deținătorilor lor de drepturi. "
+            "Pentru termenii exacți, consultă licența fiecărui proiect în parte."
         )
-        self.lbl_info_note.setWordWrap(True)
-        self.lbl_info_note.setStyleSheet("font-size: 11px;")
+        self.lbl_info_licenses.setWordWrap(True)
 
         info_layout.addWidget(self.lbl_info_summary)
         info_layout.addLayout(info_grid)
-        info_layout.addWidget(self.lbl_info_note)
+        info_layout.addWidget(self.lbl_info_licenses_title)
+        info_layout.addWidget(self.lbl_info_licenses)
         self.group_info.setLayout(info_layout)
+
+        # --- Box separat pentru locatii/configurare (conturat cu alb) ---
+        self.group_info_paths = QGroupBox("Locații și configurare")
+        paths_layout = QVBoxLayout()
+        paths_grid = QFormLayout()
+        paths_grid.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        paths_grid.setFormAlignment(Qt.AlignmentFlag.AlignTop)
+        paths_grid.setHorizontalSpacing(16)
+        paths_grid.setVerticalSpacing(8)
+
+        def add_path_row(label_text, value_text):
+            lbl = QLabel(label_text)
+            val = QLabel(str(value_text))
+            val.setWordWrap(True)
+            self._info_label_widgets.append(lbl)
+            self._info_value_widgets.append(val)
+            paths_grid.addRow(lbl, val)
+
+        add_path_row("Teme disponibile:", ", ".join(list(themes.THEME_PALETTES.keys())))
+        add_path_row("Settings file:", get_settings_path())
+        add_path_row("Cache folder:", get_cache_root())
+        add_path_row("Project root:", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        add_path_row("Executabil:", sys.executable)
+
+        paths_layout.addLayout(paths_grid)
+        self.group_info_paths.setLayout(paths_layout)
 
         # --- 1.7 GRUP SETTINGS.INI (NOU) ---
         self.group_ini = QGroupBox("Settings.ini (Advanced)")
@@ -474,7 +578,13 @@ class SettingsTab(QWidget):
         """)
         self.btn_reset_all_settings_debug.clicked.connect(self.on_reset_all_settings_debug)
 
+        self.btn_open_ini_page = QPushButton("Settings.ini (editor)")
+        self.btn_open_ini_page.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.btn_open_ini_page.setFixedWidth(self.btn_open_ini_page.sizeHint().width() + 8)
+        self.btn_open_ini_page.clicked.connect(lambda: self._open_settings_section("ini"))
+
         dev_layout.addWidget(self.btn_debug)
+        dev_layout.addWidget(self.btn_open_ini_page)
         dev_layout.addWidget(self.btn_open_wider_ui)
         dev_layout.addWidget(self.btn_reset_limiter_debug)
         dev_layout.addWidget(self.btn_reset_effects_debug)
@@ -482,20 +592,6 @@ class SettingsTab(QWidget):
         group_dev.setLayout(dev_layout)
         self.group_dev = group_dev
 
-        footer_info = QWidget()
-        footer_layout = QVBoxLayout(footer_info)
-        footer_layout.setContentsMargins(0, 0, 0, 0)
-        footer_layout.setSpacing(2)
-
-        self.lbl_app_name = QLabel("")
-        self.lbl_app_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        # Version label intentionally left blank (hidden) per user request
-        self.lbl_app_version = QLabel("")
-        self.lbl_app_version.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        footer_layout.addWidget(self.lbl_app_name)
-        footer_layout.addWidget(self.lbl_app_version)
         button_specs = [
             ("Aspect și Personalizare", "Temă, zoom, FFT și viteza animațiilor.", "settings-app-dashboard.svg", "app"),
             ("Audio & EQ", "Benzi EQ, bass și treble range.", "settings-audio-dashboard.svg", "audio"),
@@ -512,7 +608,6 @@ class SettingsTab(QWidget):
             dashboard_layout.addWidget(button)
 
         dashboard_layout.addStretch()
-        dashboard_layout.addWidget(footer_info, 0, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom)
 
         self.detail_page = QWidget()
         detail_layout = QVBoxLayout(self.detail_page)
@@ -556,8 +651,9 @@ class SettingsTab(QWidget):
             "app": self._create_settings_section_page([self.group_app]),
             "audio": self._create_settings_section_page([self.group_audio]),
             "stats": self._create_settings_section_page([self.group_statistics]),
-            "info": self._create_settings_section_page([self.group_info]),
-            "advanced": self._create_settings_section_page([self.group_ini, self.group_discord, self.group_dev]),
+            "info": self._create_settings_section_page([self.group_info, self.group_info_paths]),
+            "advanced": self._create_settings_section_page([self.group_discord, self.group_dev]),
+            "ini": self._create_settings_section_page([self.group_ini]),
         }
         self.section_titles = {
             "app": "Aspect și Personalizare",
@@ -565,9 +661,10 @@ class SettingsTab(QWidget):
             "stats": "Statistici",
             "info": "Info",
             "advanced": "Advanced",
+            "ini": "Settings.ini",
         }
 
-        for key in ("app", "audio", "stats", "info", "advanced"):
+        for key in ("app", "audio", "stats", "info", "advanced", "ini"):
             self.section_stack.addWidget(self.section_pages[key])
 
         self.settings_stack.addWidget(dashboard_page)
@@ -647,6 +744,7 @@ class SettingsTab(QWidget):
     def _open_settings_section(self, section_key):
         if section_key not in self.section_pages:
             return
+        self._current_section_key = section_key
         def switch():
             self.lbl_section_title.setText(self.section_titles.get(section_key, "Settings"))
             self.section_stack.setCurrentWidget(self.section_pages[section_key])
@@ -691,8 +789,6 @@ class SettingsTab(QWidget):
         danger_pressed = "#a93226"
 
         title_size = max(18, int(24 * z))
-        app_name_size = max(13, int(16 * z))
-        version_size = max(10, int(12 * z))
         note_size = max(10, int(11 * z))
         dashboard_card_h = max(64, int(76 * z))
         dashboard_radius = dashboard_card_h // 2
@@ -715,8 +811,6 @@ class SettingsTab(QWidget):
             self.detail_page.layout().setSpacing(max(10, int(12 * z)))
 
         self.lbl_dashboard_title.setStyleSheet(f"font-size: {title_size}px; font-weight: bold; margin-bottom: 10px; color: {fg};")
-        self.lbl_app_name.setStyleSheet(f"font-size: {app_name_size}px; font-weight: 700; color: {fg};")
-        self.lbl_app_version.setStyleSheet(f"font-size: {version_size}px; font-weight: 600; color: {self._theme_rgba(secondary, 0.9)};")
         self.lbl_section_title.setStyleSheet(f"font-size: {title_size}px; font-weight: bold; color: {fg};")
         self.lbl_theme.setStyleSheet(f"font-weight: bold; color: {fg};")
         self.lbl_zoom.setStyleSheet(f"font-weight: bold; color: {fg};")
@@ -737,30 +831,43 @@ class SettingsTab(QWidget):
         self.lbl_discord_note.setStyleSheet(f"font-size: {note_size}px; color: {self._theme_rgba(secondary, 0.92)};")
         self.lbl_statistics_note.setStyleSheet(f"font-size: {note_size}px; color: {self._theme_rgba(secondary, 0.92)};")
         self.lbl_info_summary.setStyleSheet(f"font-size: {max(11, int(13 * z))}px; color: {fg};")
-        self.lbl_info_note.setStyleSheet(f"font-size: {note_size}px; color: {self._theme_rgba(secondary, 0.92)};")
         self.lbl_cache_status.setStyleSheet(f"font-size: {note_size}px; color: {self._theme_rgba(secondary, 0.92)};")
         self.lbl_ini_status.setStyleSheet(f"font-size: {note_size}px; color: {self._theme_rgba(secondary, 0.92)};")
 
-        info_labels = [
-            self.lbl_info_version_label,
-            self.lbl_info_runtime_label,
-            self.lbl_info_theme_label,
-            self.lbl_info_settings_label,
-            self.lbl_info_cache_label,
-            self.lbl_info_project_label,
-        ]
-        info_values = [
-            self.lbl_info_version_value,
-            self.lbl_info_runtime_value,
-            self.lbl_info_theme_value,
-            self.lbl_info_settings_value,
-            self.lbl_info_cache_value,
-            self.lbl_info_project_value,
-        ]
-        for label in info_labels:
+        # Listele sunt construite la crearea sectiunii Info (add_info_row), ca
+        # sa nu trebuiasca actualizate manual aici la fiecare rand nou.
+        for label in getattr(self, '_info_label_widgets', []):
             label.setStyleSheet(f"font-weight: bold; color: {fg};")
-        for value in info_values:
+        for value in getattr(self, '_info_value_widgets', []):
             value.setStyleSheet(f"color: {self._theme_rgba(secondary, 0.96)};")
+
+        if hasattr(self, 'lbl_info_licenses_title'):
+            self.lbl_info_licenses_title.setStyleSheet(
+                f"font-weight: bold; font-size: {max(12, int(14 * z))}px; color: {fg}; margin-top: 6px;"
+            )
+        if hasattr(self, 'lbl_info_licenses'):
+            self.lbl_info_licenses.setStyleSheet(
+                f"font-size: {note_size}px; color: {self._theme_rgba(secondary, 0.92)};"
+            )
+
+        if hasattr(self, 'group_info_paths'):
+            # Box separat, conturat cu alb, ca sa se distinga de restul sectiunii.
+            self.group_info_paths.setStyleSheet(
+                "QGroupBox {"
+                " color: #FFFFFF;"
+                " font-weight: bold;"
+                " border: 1px solid rgba(255, 255, 255, 0.85);"
+                " border-radius: 8px;"
+                " margin-top: 1.2em;"
+                " padding: 10px;"
+                "}"
+                "QGroupBox::title {"
+                " subcontrol-origin: margin;"
+                " subcontrol-position: top left;"
+                " left: 10px;"
+                " padding: 0 4px;"
+                "}"
+            )
 
         back_icon_path = os.path.join(self._icons_dir, "playlist", "arrow-down-solid-full.svg")
         back_icon = IconHelper.get_colored_icon(back_icon_path, fg, size=back_icon_size)
@@ -945,6 +1052,12 @@ class SettingsTab(QWidget):
         return " • ".join(parts)
 
     def _go_to_settings_dashboard(self):
+        # Pagina Settings.ini se deschide din Advanced (Developer Tools), deci
+        # butonul inapoi duce acolo, nu direct in dashboard.
+        if getattr(self, '_current_section_key', None) == "ini":
+            self._open_settings_section("advanced")
+            return
+        self._current_section_key = None
         self._animate_settings_stack_switch(lambda: self.settings_stack.setCurrentIndex(0), target_widget=self.settings_stack.widget(0))
 
     def _cleanup_settings_fade_effects(self):
@@ -1026,7 +1139,6 @@ class SettingsTab(QWidget):
 
     def on_bands_change(self, value):
         bands = int(round(value))
-        self.lbl_bands_val.setText(f"{bands} Bands")
         self.eq_bands_changed.emit(bands)
 
     def on_bass_range_change(self, value):

@@ -77,7 +77,12 @@ class RoundedArtLabel(QLabel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.image_data = None
-        self.radius = 20 
+        self.radius = 20
+        # Pixmap-ul scalat se cacheaza si se refoloseste intre cadre - inainte
+        # se recalcula (scalare SmoothTransformation) la fiecare paintEvent,
+        # chiar daca imaginea si dimensiunea nu se schimbasera.
+        self._scaled_pixmap_cache = None
+        self._scaled_pixmap_key = None
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
         # Stil implicit
         self.setStyleSheet("""
@@ -95,8 +100,29 @@ class RoundedArtLabel(QLabel):
     
     def set_art(self, qimage):
         self.image_data = qimage
+        self._scaled_pixmap_cache = None
+        self._scaled_pixmap_key = None
         self.update()
-        
+
+    def resizeEvent(self, event):
+        self._scaled_pixmap_cache = None
+        self._scaled_pixmap_key = None
+        super().resizeEvent(event)
+
+    def _get_scaled_pixmap(self, dpr):
+        phys_w = int(self.width() * dpr)
+        phys_h = int(self.height() * dpr)
+        key = (id(self.image_data), phys_w, phys_h)
+        if self._scaled_pixmap_cache is not None and self._scaled_pixmap_key == key:
+            return self._scaled_pixmap_cache
+
+        pixmap = QPixmap.fromImage(self.image_data)
+        scaled_pixmap = pixmap.scaled(phys_w, phys_h, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
+        scaled_pixmap.setDevicePixelRatio(dpr)
+        self._scaled_pixmap_cache = scaled_pixmap
+        self._scaled_pixmap_key = key
+        return scaled_pixmap
+
     def paintEvent(self, event):
         if not self.image_data or self.image_data.isNull():
             super().paintEvent(event)
@@ -109,11 +135,7 @@ class RoundedArtLabel(QLabel):
         path.addRoundedRect(rect, self.radius, self.radius)
         painter.setClipPath(path)
         dpr = self.devicePixelRatioF()
-        phys_w = int(self.width() * dpr)
-        phys_h = int(self.height() * dpr)
-        pixmap = QPixmap.fromImage(self.image_data)
-        scaled_pixmap = pixmap.scaled(phys_w, phys_h, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
-        scaled_pixmap.setDevicePixelRatio(dpr)
+        scaled_pixmap = self._get_scaled_pixmap(dpr)
         logical_w = scaled_pixmap.width() / dpr
         logical_h = scaled_pixmap.height() / dpr
         x = (self.width() - logical_w) / 2

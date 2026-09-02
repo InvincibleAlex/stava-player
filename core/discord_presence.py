@@ -1,3 +1,4 @@
+import queue
 import threading
 import time
 
@@ -56,6 +57,16 @@ class DiscordPresenceManager(QObject):
         self._resolved_large_image = ""
         self._artwork_lookup = DiscordArtworkLookup()
         self.artwork_resolved.connect(self._on_artwork_resolved)
+
+        # The actual Discord connect/update/clear calls are blocking IPC and
+        # used to run directly on the Qt main thread (called from Play/Pause,
+        # Seek, track-change handlers), so a slow or unresponsive Discord
+        # client could freeze the UI. They now run on this single background
+        # thread instead; the main thread only ever enqueues commands.
+        self._command_queue = queue.Queue()
+        self._worker_thread = threading.Thread(target=self._worker_loop, name="DiscordPresenceWorker", daemon=True)
+        self._worker_thread.start()
+
         self.refresh_from_settings()
 
     def refresh_from_settings(self):
@@ -82,7 +93,7 @@ class DiscordPresenceManager(QObject):
         self.enabled = bool(new_enabled) and HAS_DISCORD_RPC and bool(self.client_id)
 
         if reconnect_needed:
-            self._disconnect()
+            self._enqueue_command("disconnect")
 
         if not self.enabled:
             if new_enabled and not HAS_DISCORD_RPC:
@@ -92,7 +103,7 @@ class DiscordPresenceManager(QObject):
             self.clear()
             return
 
-        self._publish(force=True)
+        self._request_publish()
 
     def update_metadata(self, title, artist, album, art_path, duration=0, track_path="", is_playing=None, elapsed=0):
         self.title = title or "Unknown Title"
@@ -109,51 +120,23 @@ class DiscordPresenceManager(QObject):
             self.is_playing = bool(is_playing)
 
         self._start_artwork_lookup_if_needed(self._artwork_lookup_generation)
-        self._publish(force=True)
+        self._request_publish()
 
     def update_state(self, is_playing, elapsed=None):
         self.is_playing = bool(is_playing)
         if elapsed is not None:
             self.elapsed = max(0.0, float(elapsed or 0.0))
-        self._publish(force=True)
+        self._request_publish()
 
     def clear(self):
         self._last_payload = None
-        if self.connected and self.rpc is not None:
-            try:
-                self.rpc.clear()
-            except Exception:
-                pass
+        self._enqueue_command("clear")
 
     def shutdown(self):
-        self.clear()
-        self._disconnect()
-
-    def _disconnect(self):
-        if self.rpc is not None:
-            try:
-                self.rpc.close()
-            except Exception:
-                pass
-        self.rpc = None
-        self.connected = False
-
-    def _ensure_connection(self):
-        if not self.enabled or not HAS_DISCORD_RPC:
-            return False
-        if self.connected and self.rpc is not None:
-            return True
-
-        try:
-            self.rpc = Presence(self.client_id)
-            self.rpc.connect()
-            self.connected = True
-            return True
-        except Exception as e:
-            self.rpc = None
-            self.connected = False
-            self._log_debug(f"Discord RPC connection failed: {e}")
-            return False
+        self._enqueue_command("shutdown")
+        # Give the worker a short window to actually clear/close the Discord
+        # connection before the app exits, but never block shutdown forever.
+        self._worker_thread.join(timeout=1.5)
 
     def _build_payload(self):
         if not self.title and not self.artist:
@@ -252,7 +235,7 @@ class DiscordPresenceManager(QObject):
         if generation != self._artwork_lookup_generation:
             return
         self._resolved_large_image = str(artwork_url or "").strip()
-        self._publish(force=True)
+        self._request_publish()
 
     def _is_remote_url(self, value):
         text = str(value or "").strip()
@@ -326,17 +309,78 @@ class DiscordPresenceManager(QObject):
         self._last_error_log = message
         print(f"Discord Presence: {message}")
 
-    def _publish(self, force=False):
+    def _request_publish(self):
+        """ Builds the payload here (cheap, no I/O) and hands it to the
+        background worker thread, which owns the actual Discord connection
+        and does the blocking connect/update calls. """
         if not self.enabled:
-            return
-        if not self._ensure_connection():
             return
 
         payload = self._build_payload()
         if not payload:
             self.clear()
             return
-        if not force and payload == self._last_payload:
+
+        self._enqueue_command("publish", payload)
+
+    def _enqueue_command(self, kind, payload=None):
+        self._command_queue.put((kind, payload))
+
+    def _worker_loop(self):
+        """ Runs on the background thread for the app's lifetime, processing
+        connect/publish/clear/disconnect commands in the order they were
+        requested, so it never blocks the UI. """
+        while True:
+            kind, payload = self._command_queue.get()
+            if kind == "shutdown":
+                self._worker_clear()
+                self._worker_disconnect()
+                return
+            elif kind == "clear":
+                self._worker_clear()
+            elif kind == "disconnect":
+                self._worker_disconnect()
+            elif kind == "publish":
+                self._worker_publish(payload)
+
+    def _worker_ensure_connection(self):
+        if not self.enabled or not HAS_DISCORD_RPC:
+            return False
+        if self.connected and self.rpc is not None:
+            return True
+
+        try:
+            self.rpc = Presence(self.client_id)
+            self.rpc.connect()
+            self.connected = True
+            return True
+        except Exception as e:
+            self.rpc = None
+            self.connected = False
+            self._log_debug(f"Discord RPC connection failed: {e}")
+            return False
+
+    def _worker_disconnect(self):
+        if self.rpc is not None:
+            try:
+                self.rpc.close()
+            except Exception:
+                pass
+        self.rpc = None
+        self.connected = False
+
+    def _worker_clear(self):
+        self._last_payload = None
+        if self.connected and self.rpc is not None:
+            try:
+                self.rpc.clear()
+            except Exception:
+                pass
+
+    def _worker_publish(self, payload):
+        if not self.enabled:
+            return
+        if not self._worker_ensure_connection():
             return
 
         try:

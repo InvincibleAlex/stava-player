@@ -736,12 +736,19 @@ class ListVirtualizer(QObject):
         if not self._alive() or not self._enabled or self.lw.count() == 0:
             return
         vp = self.lw.viewport().rect()
+        model = self.lw.model()
+
+        # Gasim primul rand vizibil direct (indexAt), fara sa pornim de la 0.
+        # Foloseam visualItemRect(item), care cauta indexul randului printr-o
+        # parcurgere liniara a listei (indexFromItem) - facuta pentru fiecare
+        # rand de la 0 pana la scroll-ul curent, la fiecare scroll tick. Pe o
+        # biblioteca mare, scrollata jos, asta era patratic si ingheta UI-ul.
+        start_index = self.lw.indexAt(vp.topLeft())
+        start_row = start_index.row() if start_index.isValid() else 0
+
         rows = []
-        for r in range(self.lw.count()):
-            item = self.lw.item(r)
-            if not item:
-                continue
-            ir = self.lw.visualItemRect(item)
+        for r in range(start_row, self.lw.count()):
+            ir = self.lw.visualRect(model.index(r, 0))
             if ir.bottom() < vp.top():
                 continue
             if ir.top() > vp.bottom():

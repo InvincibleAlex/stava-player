@@ -158,10 +158,25 @@ def get_debug_stylesheet():
 
     /* --- EQ & CUSTOM WIDGETS --- */
 
-    /* 🎛️ AudioKnob & KnobGraphic - Cerc vizibil */
-    AudioKnob, KnobGraphic {
-        border: 1px dotted lime;
+    /* 🎛️ AudioKnob (containerul mare) - lime, contine cele doua de mai jos */
+    AudioKnob {
+        border: 2px dashed lime;
         background-color: rgba(0, 255, 0, 0.05);
+    }
+
+    /* 🎯 Container-ul de text/valoare al knob-ului - portocaliu */
+    QWidget#AudioKnobTextContainer {
+        border: 2px dotted #FF8C00;
+        background-color: rgba(255, 140, 0, 0.18);
+    }
+
+    /* 🔵 KnobGraphic (cercul propriu-zis) - cyan.
+       Nota: KnobGraphic isi deseneaza singur continutul (paintEvent custom),
+       deci border-ul din stylesheet poate sa nu apara; conturul lui se vede
+       oricum prin diferenta fata de containerul portocaliu de alaturi. */
+    KnobGraphic {
+        border: 2px dotted #00E5FF;
+        background-color: rgba(0, 229, 255, 0.10);
     }
 
     /* 🎚️ EqBandSlider */

@@ -51,52 +51,60 @@ class PlaylistLogic:
             (f"%{PlaylistScanner.CUE_MARKER}%",)
         )
 
-        for row in rows:
-            old_path = row['path']
-            new_path = PlaylistScanner.canonicalize_track_path(old_path)
-            if not new_path or new_path == old_path:
-                continue
-
-            existing = self.db.fetch_one(
-                """
-                SELECT title, artist, album, duration, play_count, art_path, art_small_path, lyrics, waveform
-                FROM songs WHERE path = ?
-                """,
-                (new_path,)
-            )
-
-            merged_title = (existing['title'] if existing and existing['title'] else row['title']) or ""
-            merged_artist = (existing['artist'] if existing and existing['artist'] else row['artist']) or ""
-            merged_album = (existing['album'] if existing and existing['album'] else row['album']) or ""
-            merged_duration = (existing['duration'] if existing and existing['duration'] else row['duration']) or 0.0
-            merged_play_count = (existing['play_count'] if existing and existing['play_count'] else 0) + (row['play_count'] or 0)
-            merged_art = (existing['art_path'] if existing and existing['art_path'] else row['art_path']) or ""
-            merged_small_art = (existing['art_small_path'] if existing and existing['art_small_path'] else row['art_small_path']) or ""
-            merged_lyrics = (existing['lyrics'] if existing and existing['lyrics'] else row['lyrics']) or ""
-            merged_waveform = existing['waveform'] if existing and existing['waveform'] else row['waveform']
-
-            self.db.execute(
-                """
-                INSERT OR REPLACE INTO songs
-                (path, title, artist, album, duration, play_count, art_path, art_small_path, lyrics, waveform)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    new_path,
-                    merged_title,
-                    merged_artist,
-                    merged_album,
-                    merged_duration,
-                    merged_play_count,
-                    merged_art,
-                    merged_small_art,
-                    merged_lyrics,
-                    merged_waveform,
-                )
-            )
-            self.db.execute("DELETE FROM songs WHERE path = ?", (old_path,))
-
         if rows:
+            # One commit for the whole batch instead of two per row - this used
+            # to run at every startup with no transaction, so a library with
+            # many CUE tracks meant hundreds of individual disk commits before
+            # the window even showed up.
+            self.db.begin_transaction()
+            try:
+                for row in rows:
+                    old_path = row['path']
+                    new_path = PlaylistScanner.canonicalize_track_path(old_path)
+                    if not new_path or new_path == old_path:
+                        continue
+
+                    existing = self.db.fetch_one(
+                        """
+                        SELECT title, artist, album, duration, play_count, art_path, art_small_path, lyrics, waveform
+                        FROM songs WHERE path = ?
+                        """,
+                        (new_path,)
+                    )
+
+                    merged_title = (existing['title'] if existing and existing['title'] else row['title']) or ""
+                    merged_artist = (existing['artist'] if existing and existing['artist'] else row['artist']) or ""
+                    merged_album = (existing['album'] if existing and existing['album'] else row['album']) or ""
+                    merged_duration = (existing['duration'] if existing and existing['duration'] else row['duration']) or 0.0
+                    merged_play_count = (existing['play_count'] if existing and existing['play_count'] else 0) + (row['play_count'] or 0)
+                    merged_art = (existing['art_path'] if existing and existing['art_path'] else row['art_path']) or ""
+                    merged_small_art = (existing['art_small_path'] if existing and existing['art_small_path'] else row['art_small_path']) or ""
+                    merged_lyrics = (existing['lyrics'] if existing and existing['lyrics'] else row['lyrics']) or ""
+                    merged_waveform = existing['waveform'] if existing and existing['waveform'] else row['waveform']
+
+                    self.db.execute(
+                        """
+                        INSERT OR REPLACE INTO songs
+                        (path, title, artist, album, duration, play_count, art_path, art_small_path, lyrics, waveform)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            new_path,
+                            merged_title,
+                            merged_artist,
+                            merged_album,
+                            merged_duration,
+                            merged_play_count,
+                            merged_art,
+                            merged_small_art,
+                            merged_lyrics,
+                            merged_waveform,
+                        )
+                    )
+                    self.db.execute("DELETE FROM songs WHERE path = ?", (old_path,))
+            finally:
+                self.db.commit_transaction()
+
             self.clear_cache()
 
     def sync_cue_artwork_entries(self):
@@ -107,28 +115,33 @@ class PlaylistLogic:
         )
 
         updated = False
-        for row in rows:
-            cue_path = row['path']
-            source_path = PlaylistScanner.resolve_audio_path(cue_path)
-            if not source_path:
-                continue
+        if rows:
+            self.db.begin_transaction()
+            try:
+                for row in rows:
+                    cue_path = row['path']
+                    source_path = PlaylistScanner.resolve_audio_path(cue_path)
+                    if not source_path:
+                        continue
 
-            source_large = self.get_cached_art_path(source_path)
-            source_small = self.get_cached_small_art_path(source_path)
+                    source_large = self.get_cached_art_path(source_path)
+                    source_small = self.get_cached_small_art_path(source_path)
 
-            if not source_large:
-                source_large, source_small = PlaylistScanner.cache_artwork(source_path, self.cache_dir, self.cache_small_dir)
+                    if not source_large:
+                        source_large, source_small = PlaylistScanner.cache_artwork(source_path, self.cache_dir, self.cache_small_dir)
 
-            new_large = source_large or ""
-            new_small = source_small or ""
-            if row['art_path'] != new_large or row['art_small_path'] != new_small:
-                self.db.execute(
-                    "UPDATE songs SET art_path = ?, art_small_path = ? WHERE path = ?",
-                    (new_large, new_small, cue_path)
-                )
-                if new_large:
-                    self.art_paths_cache[cue_path] = new_large
-                updated = True
+                    new_large = source_large or ""
+                    new_small = source_small or ""
+                    if row['art_path'] != new_large or row['art_small_path'] != new_small:
+                        self.db.execute(
+                            "UPDATE songs SET art_path = ?, art_small_path = ? WHERE path = ?",
+                            (new_large, new_small, cue_path)
+                        )
+                        if new_large:
+                            self.art_paths_cache[cue_path] = new_large
+                        updated = True
+            finally:
+                self.db.commit_transaction()
 
         if updated:
             self.clear_cache()

@@ -186,6 +186,109 @@ class AnimationManager:
         # Curățăm overlay-urile rămase de la animația întreruptă
         self._cleanup()
 
+    def animate_player_artwork_resize(self, rebuild_fn):
+        """ Artwork-ul isi schimba animat marimea cand Player-ul trece intre
+        Full si Mini (se micsoreaza sau se mareste, dupa caz).
+
+        Deliberat izolata: nu foloseste self.main.anim_group, _cleanup(),
+        _create_overlay_anim() sau listele comune (_overlays/_effects_targets),
+        ca sa nu poata interfera cu animate_transition_to_player sau
+        animate_stack_switch, care ruleaza in acelasi timp.
+        """
+        ui_player = self.main.ui_player
+        lbl_art = getattr(ui_player, 'lbl_art', None)
+
+        # Daca se apasa rapid de mai multe ori, o animatie anterioara neterminata
+        # nu trebuie sa lase artwork-ul blocat invizibil (setVisible(False) fara
+        # sa mai apuce sa ruleze done()).
+        prev_anim = getattr(self, '_artwork_resize_anim', None)
+        if prev_anim:
+            if prev_anim.state() == QPropertyAnimation.State.Running:
+                prev_anim.stop()
+            self._artwork_resize_anim = None
+        if lbl_art:
+            lbl_art.setVisible(True)
+
+        start_rect = self.get_global_rect(lbl_art) if lbl_art else None
+        pixmap = None
+        if lbl_art:
+            if getattr(lbl_art, 'image_data', None):
+                pixmap = QPixmap.fromImage(lbl_art.image_data)
+            else:
+                pixmap = lbl_art.pixmap()
+
+        # Fara imagine/geometrie valida nu avem ce anima - schimbam tabul normal.
+        if not start_rect or not pixmap or pixmap.isNull():
+            rebuild_fn()
+            return
+
+        entering_full = (ui_player.current_mode == "MINI")
+
+        # Ascundem artwork-ul real INAINTE de rebuild, ca sa nu apuce sa se
+        # vada la marimea finala inainte de vreme. Folosim setVisible(False)
+        # (nu un QGraphicsOpacityEffect) - efectul de opacitate nu supravietuia
+        # reparent-arii facute de rebuild_fn() (Qt il reseteaza), asa ca
+        # artwork-ul real redevenea vizibil la locul lui in timpul animatiei.
+        # setVisible(False) e o ascundere reala, nu doar vizuala, si nu poate
+        # fi anulata de reparent-are.
+        lbl_art.setVisible(False)
+
+        rebuild_fn()
+
+        art_c = getattr(ui_player, 'artwork_container', None)
+
+        # La intrarea in Full, set_mode_full() nu primeste nicio latime tinta
+        # explicita (spre deosebire de Mini, unde _apply_tab_change() calculeaza
+        # si fixeaza deja inaltimea corecta) - fortam layout-ul sa se aseze
+        # inainte de masuratoare, altfel citim inca latimea veche (mica) si
+        # animatia nu are unde sa se duca (start_rect == end_rect). La iesirea
+        # din Full NU atingem inaltimea - e deja corecta, orice recalculare aici
+        # ar suprascrie-o cu o valoare intermediara, gresita.
+        if entering_full:
+            if ui_player.layout():
+                ui_player.layout().activate()
+            if art_c:
+                cw = art_c.width()
+                if cw > 0 and art_c.height() != cw:
+                    art_c.setFixedHeight(cw)
+                if art_c.layout():
+                    art_c.layout().activate()
+            QCoreApplication.sendPostedEvents(None, 0)
+
+        if art_c and art_c.width() > 0:
+            end_rect = self.get_global_rect(art_c)
+        else:
+            end_rect = self.get_global_rect(lbl_art)
+            end_rect.setHeight(end_rect.width())
+
+        overlay = TransitionOverlay(self.main)
+        overlay.setPixmap(pixmap)
+        overlay.setScaledContents(True)
+        overlay.setGeometry(start_rect)
+        overlay.radius = 20.0
+        overlay.render_mode = "cover"
+        overlay.raise_() # aceeasi ordine ca la animate_transition_to_player (functionala)
+        overlay.show()
+
+        group = QParallelAnimationGroup()
+        self._add_anim(group, overlay, b"geometry", start_rect, end_rect, self.speed_move)
+
+        def done():
+            try:
+                overlay.hide()
+                overlay.deleteLater()
+            except Exception:
+                pass
+            try:
+                lbl_art.setVisible(True)
+            except Exception:
+                pass
+            self._artwork_resize_anim = None
+
+        group.finished.connect(done)
+        self._artwork_resize_anim = group # pastram referinta ca sa nu fie colectata
+        group.start()
+
     def animate_transition_to_player(self, filepath=None):
         self._stop_previous_animation() # 🔥 STOP & CLEANUP
         start_rect, start_radius, pixmap = None, 10.0, None

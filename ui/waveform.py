@@ -51,6 +51,15 @@ class WaveformWidget(QWidget):
         self.chunks_future = [] # Lista de QPixmap (Gri/Secondary)
         self.chunk_width = 2000 # Lățimea unei bucăți pre-randate
 
+        # Buffer-ul de cadru și masca de fade se refolosesc intre cadre - se
+        # realoca doar cand se schimba dimensiunea, nu la fiecare paintEvent.
+        # Inainte se realocau la fiecare cadru, cost proportional cu numarul
+        # de pixeli ai ferestrei (fluent pe fereastra mica, lag pe fullscreen).
+        self._frame_buffer = None
+        self._frame_buffer_key = None
+        self._fade_mask = None
+        self._fade_mask_key = None
+
         # Interacțiune
         self.is_dragging = False 
         self.drag_start_x = 0    
@@ -170,8 +179,19 @@ class WaveformWidget(QWidget):
         self.update()
 
     def set_theme_colors(self, theme_colors):
+        # Randarea chunk-urilor (render_chunks) e costisitoare - o facem doar
+        # daca s-au schimbat culorile care chiar apar in desen. Altfel se
+        # refacea tot cache-ul de imagini de fiecare data cand Player-ul
+        # trecea Full<->Mini, chiar daca tema era aceeasi (~50ms irosite).
+        old_primary = self.colors.get("PRIMARY")
+        old_secondary = self.colors.get("SECONDARY")
         self.colors.update(theme_colors)
-        self.render_chunks() # Re-randăm dacă se schimbă tema
+        colors_changed = (
+            old_primary != self.colors.get("PRIMARY")
+            or old_secondary != self.colors.get("SECONDARY")
+        )
+        if colors_changed:
+            self.render_chunks()
         self.update()
 
     def update_fade(self, val):
@@ -500,12 +520,19 @@ class WaveformWidget(QWidget):
         center_x = w / 2 
         
         # --- BUFFER PENTRU WAVEFORM (PENTRU FADE) ---
-        # Desenăm waveform-ul într-un pixmap temporar pentru a putea aplica masca de fade
+        # Desenăm waveform-ul într-un pixmap temporar pentru a putea aplica masca de fade.
+        # Buffer-ul e persistent intre cadre, doar continutul se sterge/redeseneaza.
         dpr = self.devicePixelRatioF()
-        wave_pix = QPixmap(int(w * dpr), int(h * dpr))
-        wave_pix.setDevicePixelRatio(dpr)
+        phys_w = max(1, int(w * dpr))
+        phys_h = max(1, int(h * dpr))
+        buffer_key = (phys_w, phys_h)
+        if self._frame_buffer is None or self._frame_buffer_key != buffer_key:
+            self._frame_buffer = QPixmap(phys_w, phys_h)
+            self._frame_buffer.setDevicePixelRatio(dpr)
+            self._frame_buffer_key = buffer_key
+        wave_pix = self._frame_buffer
         wave_pix.fill(Qt.GlobalColor.transparent)
-        
+
         p = QPainter(wave_pix) # Painter-ul temporar
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
@@ -585,19 +612,19 @@ class WaveformWidget(QWidget):
                 p.drawLine(int(center_x), int(y_start), int(center_x), int(y_end))
 
         # --- APLICARE FADE MASK PE BUFFER ---
-        # Folosim DestinationIn pentru a face marginile transparente
-        p.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
-        
+        # Folosim DestinationIn pentru a face marginile transparente.
+        # Masca e cache-uita: gradientul se recalculeaza doar cand se schimba
+        # dimensiunea sau zoom-ul, nu la fiecare cadru.
         fade_w = max(20, int(40 * self.zoom_factor)) # Distanță scurtă de fade
         if w > 0:
-            gradient = QLinearGradient(0, 0, w, 0)
-            gradient.setColorAt(0.0, QColor(0, 0, 0, 0))       # Transparent stânga
-            gradient.setColorAt(fade_w / w, QColor(0, 0, 0, 255)) # Opac după fade_w
-            gradient.setColorAt(1.0 - (fade_w / w), QColor(0, 0, 0, 255)) # Opac până la dreapta
-            gradient.setColorAt(1.0, QColor(0, 0, 0, 0))       # Transparent dreapta
-            
-            p.fillRect(self.rect(), gradient)
-        
+            mask_key = (phys_w, phys_h, fade_w)
+            if self._fade_mask is None or self._fade_mask_key != mask_key:
+                self._fade_mask = self._build_fade_mask(w, h, dpr, fade_w)
+                self._fade_mask_key = mask_key
+
+            p.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
+            p.drawPixmap(0, 0, self._fade_mask)
+
         p.end() # Terminăm desenarea pe buffer
 
         # 5. Desenăm Buffer-ul pe Widget
@@ -663,6 +690,25 @@ class WaveformWidget(QWidget):
 
         painter.setPen(text_col)
         painter.drawText(right_rect, int(Qt.AlignmentFlag.AlignCenter), total_str)
+
+    def _build_fade_mask(self, w, h, dpr, fade_w):
+        """ Construieste masca de fade (transparent la margini) o singura
+        data pentru o dimensiune/zoom date, in loc sa recalculeze gradientul
+        la fiecare cadru. """
+        mask = QPixmap(max(1, int(w * dpr)), max(1, int(h * dpr)))
+        mask.setDevicePixelRatio(dpr)
+        mask.fill(Qt.GlobalColor.transparent)
+
+        mp = QPainter(mask)
+        gradient = QLinearGradient(0, 0, w, 0)
+        gradient.setColorAt(0.0, QColor(0, 0, 0, 0))       # Transparent stânga
+        gradient.setColorAt(fade_w / w, QColor(0, 0, 0, 255)) # Opac după fade_w
+        gradient.setColorAt(1.0 - (fade_w / w), QColor(0, 0, 0, 255)) # Opac până la dreapta
+        gradient.setColorAt(1.0, QColor(0, 0, 0, 0))       # Transparent dreapta
+        mp.fillRect(QRectF(0, 0, w, h), gradient)
+        mp.end()
+
+        return mask
 
     def _draw_idle_pattern(self, painter, w, mid_y):
         col = QColor(self.colors.get('PRIMARY', '#00AAFF'))

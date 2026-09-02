@@ -159,8 +159,8 @@ class AudioKnob(QWidget):
         super().__init__(parent)
         self.format_str = format_str
         self.orientation = orientation
-        self.base_title_size = 12
-        self.base_value_size = 13
+        self.base_title_size = 15
+        self.base_value_size = 16
         self.title_color = None
         self.value_color = None
         
@@ -182,6 +182,10 @@ class AudioKnob(QWidget):
             
         self.setMaximumSize(280, 280) # Limităm mărimea pentru consistență între tab-uri
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        # Vezi nota de la text_container: fara WA_StyledBackground, un QWidget
+        # simplu ignora border-ul din stylesheet, deci nu s-ar vedea nici
+        # conturul lui in modul debug. In tema normala e transparent, fara border.
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         
         # Main Layout
         if orientation == 'vertical':
@@ -194,9 +198,21 @@ class AudioKnob(QWidget):
         
         # 1. Text Container
         text_container = QWidget()
+        self.text_container = text_container
+        # Nume distinct, folosit doar de debug_theme.py ca sa poata desena un
+        # contur separat pentru containerul de text/valoare (altfel se pierde
+        # printre toate celelalte QWidget generice din modul debug).
+        text_container.setObjectName("AudioKnobTextContainer")
+        # Un QWidget simplu ignora border/background din stylesheet daca nu are
+        # WA_StyledBackground. In tema normala QWidget e transparent si fara
+        # border, deci asta nu schimba nimic vizual - doar face sa se vada
+        # conturul din modul debug.
+        text_container.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         if orientation == 'horizontal':
-            text_width = 120 if len(str(title)) > 8 else 76
-            text_container.setFixedWidth(text_width)
+            # Latime MINIMA, nu fixa - o lățime fixă (calculata pentru fontul
+            # vechi, mai mic) taia textul titlului/valorii cand fontul creste.
+            text_width = 140 if len(str(title)) > 8 else 96
+            text_container.setMinimumWidth(text_width)
             
         text_layout = QVBoxLayout(text_container)
         text_layout.setContentsMargins(4, 0, 4, 0)
@@ -227,7 +243,10 @@ class AudioKnob(QWidget):
             layout.addWidget(self.knob)
             layout.addWidget(text_container)
         else:
-            layout.addWidget(text_container)
+            # AlignVCenter: fara asta, Qt intinde text_container pe toata
+            # inaltimea randului (cat knob-ul, care e mult mai inalt), iar
+            # titlul/valoarea raman lipite sus, cu spatiu gol dedesubt.
+            layout.addWidget(text_container, 0, Qt.AlignmentFlag.AlignVCenter)
             layout.addWidget(self.knob)
 
     def _on_anim_value_changed(self, val):
@@ -250,8 +269,47 @@ class AudioKnob(QWidget):
             QEvent.Type.ApplicationPaletteChange,
             QEvent.Type.StyleChange,
         ):
-            self._apply_label_styles(self.lbl_title.font().pointSize(), self.lbl_value.font().pointSize())
+            # 🔥 FIX: font().pointSize() intoarce -1 cand dimensiunea a fost
+            # setata in pixeli (font-size: Npx), nu in puncte - asta ducea la
+            # max(1, int(-1)) = text de 1px (practic invizibil) la fiecare
+            # schimbare de tema. Refolosim direct ultima dimensiune aplicata.
+            self._apply_label_styles(
+                getattr(self, '_current_title_size', self.base_title_size),
+                getattr(self, '_current_value_size', self.base_value_size),
+            )
         super().changeEvent(event)
+
+    def set_title_visible(self, visible):
+        """ Ascunde titlul knob-ului, pastrand doar valoarea - util cand
+        knob-ul are deja o eticheta externa (ex. randurile din Settings), ca
+        sa nu se repete acelasi text de doua ori si sa nu se mai taie titluri
+        lungi intr-un container ingust.
+
+        Cand titlul e ascuns (orizontal) pastram exact aceeasi asezare ca la
+        knob-urile din EQ (Bass/Treble), care arata bine: container compact
+        (latime minima 96), fara stretch, cu valoarea aliniata la dreapta -
+        asa textul sta lipit de cerc, fara gol intre ele. Diferenta fata de
+        EQ e doar ca titlul lipseste si valoarea se centreaza pe verticala.
+        Word-wrap ramane activ pentru valori mai lungi (ex. "320 mm"). """
+        visible = bool(visible)
+        self.lbl_title.setVisible(visible)
+
+        if self.orientation != 'horizontal':
+            return
+
+        layout = self.layout()
+        layout.setStretchFactor(self.text_container, 0)
+        layout.setStretchFactor(self.knob, 0)
+
+        if not visible:
+            self.lbl_value.setWordWrap(True)
+            self.lbl_value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            self.text_container.setMinimumWidth(96)
+        else:
+            self.lbl_value.setWordWrap(False)
+            self.lbl_value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
+            text_width = 140 if len(self.lbl_title.text()) > 8 else 96
+            self.text_container.setMinimumWidth(text_width)
 
     def on_knob_change(self, val):
         if self.isEnabled() and self.val_anim.state() != QVariantAnimation.State.Running:
@@ -286,26 +344,40 @@ class AudioKnob(QWidget):
     def _apply_label_styles(self, title_size, value_size):
         title_size = max(1, int(title_size))
         value_size = max(1, int(value_size))
+        self._current_title_size = title_size
+        self._current_value_size = value_size
         title_color = self.title_color or self._get_default_title_color()
         value_color = self.value_color or self._get_default_value_color()
+        # QLabel:disabled este necesar explicit - altfel Qt inlocuieste culoarea
+        # noastra cu cea "disabled" din paleta standard cand knob-ul e dezactivat
+        # (ex. Bass/Treble inainte de a porni Tone), facand textul sa dispara.
+        # Grafica knob-ului nu e afectata (e desenata manual cu QPainter, nu
+        # foloseste paleta), de-aia doar textul parea invizibil.
         self.lbl_title.setStyleSheet(
-            f"font-weight: bold; font-size: {title_size}px; color: {title_color}; margin-bottom: 2px;"
+            f"QLabel {{ font-weight: bold; font-size: {title_size}px; color: {title_color}; margin-bottom: 2px; }}"
+            f"QLabel:disabled {{ color: {title_color}; }}"
         )
         self.lbl_value.setStyleSheet(
-            f"font-weight: bold; font-size: {value_size}px; color: {value_color}; margin-top: 2px;"
+            f"QLabel {{ font-weight: bold; font-size: {value_size}px; color: {value_color}; margin-top: 2px; }}"
+            f"QLabel:disabled {{ color: {value_color}; }}"
         )
 
     def set_colors(self, inner, border, title_color=None, value_color=None):
         self.knob.set_colors(inner, border)
         self.title_color = title_color
         self.value_color = value_color
-        self._apply_label_styles(self.lbl_title.font().pointSize(), self.lbl_value.font().pointSize())
+        # Acelasi fix ca in changeEvent: font().pointSize() intoarce -1 cand
+        # dimensiunea a fost setata in pixeli, ceea ce ducea la text de 1px.
+        self._apply_label_styles(
+            getattr(self, '_current_title_size', self.base_title_size),
+            getattr(self, '_current_value_size', self.base_value_size),
+        )
 
     def set_zoom_factor(self, factor):
         z = max(0.6, float(factor))
 
-        title_size = max(8, int(self.base_title_size * z))
-        value_size = max(9, int(self.base_value_size * z))
+        title_size = max(11, int(self.base_title_size * z))
+        value_size = max(12, int(self.base_value_size * z))
 
         self._apply_label_styles(title_size, value_size)
 

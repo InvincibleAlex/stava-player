@@ -423,7 +423,11 @@ class PlaylistTabAnimations:
         current_widget = self.tab.stack.currentWidget()
         target_widget = target_widget or self.tab.page_browser
 
-        if current_widget is not self.tab.page_dashboard:
+        # Animam ori de cate ori chiar se schimba pagina. Inainte conditia era
+        # "doar daca plecam de pe dashboard", deci intoarcerea inapoi la
+        # dashboard (din Folders, All Songs, Albums, Artists etc.) se facea
+        # instant, fara fade.
+        if current_widget is target_widget:
             update_func()
             return
 
@@ -602,7 +606,45 @@ class PlaylistTabAnimations:
         if callable(settle):
             QTimer.singleShot(max(0, int(delay_ms)), settle)
 
-    def animate_browser_back_to_root(self, load_callback, header_pix, folder_leaving, header_rect=None):
+    def _add_header_arrival_motion(self, animation_group, incoming_pixmap=None):
+        """ Perechea inversa a blocului previous_header_pixmap din animate_to_header
+        (acolo, headerul vechi creste si dispare cand intri intr-un folder/album -
+        "animatia Y"). Aici, la intoarcere, headerul la care revii (deja setat de
+        load_callback, dar altfel ar aparea instant, fara nicio animatie) creste
+        dintr-o pozitie usor marita/deplasata si face fade-in - "animatia -Y".
+
+        incoming_pixmap: imaginea retinuta cand s-a intrat in acest folder (vezi
+        _push_header_pixmap in playlist_navigation.py). Header-ul isi incarca
+        imaginea asincron, deci daca am citi-o abia acum direct din widget, am
+        prinde-o adesea neincarcata inca (arata gresit o clipa, apoi sare brusc
+        la cea corecta). Cand avem valoarea retinuta, o folosim pe aceea. """
+        header_widget = getattr(self.tab.ui, 'header', None)
+        if not header_widget or not hasattr(header_widget, 'set_content_opacity'):
+            return
+
+        pixmap = incoming_pixmap if (incoming_pixmap and not incoming_pixmap.isNull()) else None
+        if not pixmap:
+            if getattr(header_widget, 'source_image', None) and not header_widget.source_image.isNull():
+                pixmap = QPixmap.fromImage(header_widget.source_image)
+            elif getattr(header_widget, 'pixmap', None) and not header_widget.pixmap.isNull():
+                pixmap = header_widget.pixmap.copy()
+        if not pixmap or pixmap.isNull():
+            return
+
+        end_rect = self._playlist_global_rect(header_widget)
+        if not end_rect.isValid() or end_rect.width() <= 0:
+            return
+        start_rect = self._build_drifted_rect(end_rect, drift_scale=0.10, grow_scale=0.18, direction_x=-1, direction_y=-1)
+
+        header_widget.set_content_opacity(0.0)
+
+        overlay = self._create_playlist_overlay_anim(
+            animation_group, pixmap, start_rect, end_rect, 30.0, 30.0, "cover", shape_mode="header_mask"
+        )
+        if overlay:
+            self._add_playlist_fade_anim(animation_group, overlay, 0.0, 1.0, self._header_fade_duration())
+
+    def animate_browser_back_to_root(self, load_callback, header_pix, folder_leaving, header_rect=None, incoming_header_pix=None):
         snapshot = self.create_browser_snapshot_overlay()
         live_effects = self.hide_browser_live_content()
         load_callback()
@@ -620,12 +662,16 @@ class PlaylistTabAnimations:
             self._add_snapshot_exit_motion(self.back_anim_group, snapshot, header_move_duration, direction_x=1, direction_y=1)
             self._add_static_overlay_entry_motion(self.back_anim_group, static_item_overlay, header_move_duration, direction_x=1, direction_y=1)
             self._add_parallel_opacity_animation(self.back_anim_group, live_effects, fade_duration, 0.0, 1.0)
+            self._add_header_arrival_motion(self.back_anim_group, incoming_pixmap=incoming_header_pix)
 
             def on_back_finished():
                 snapshot.hide()
                 snapshot.deleteLater()
                 self.cleanup_overlay_widget(static_item_overlay)
                 self.clear_browser_live_content_effects()
+                header_widget = getattr(self.tab.ui, 'header', None)
+                if header_widget and hasattr(header_widget, 'set_content_opacity'):
+                    header_widget.set_content_opacity(1.0)
                 self._settle_playlist_layout_later()
                 self.tab.set_hover_enabled(True)
 
@@ -634,7 +680,7 @@ class PlaylistTabAnimations:
 
         QTimer.singleShot(0, start_back_animations)
 
-    def animate_browser_back_to_parent(self, load_callback, header_pix, folder_leaving, header_rect=None):
+    def animate_browser_back_to_parent(self, load_callback, header_pix, folder_leaving, header_rect=None, incoming_header_pix=None):
         old_pix = self.tab.file_list.grab()
         snapshot = QLabel(self.tab.page_browser)
         snapshot.setPixmap(old_pix)
@@ -666,12 +712,16 @@ class PlaylistTabAnimations:
             anim_list.setEndValue(1.0)
 
             self.back_anim_group.addAnimation(anim_list)
+            self._add_header_arrival_motion(self.back_anim_group, incoming_pixmap=incoming_header_pix)
 
             def on_back_finished():
                 snapshot.hide()
                 snapshot.deleteLater()
                 self.cleanup_overlay_widget(static_item_overlay)
                 self.tab.file_list.setGraphicsEffect(None)
+                header_widget = getattr(self.tab.ui, 'header', None)
+                if header_widget and hasattr(header_widget, 'set_content_opacity'):
+                    header_widget.set_content_opacity(1.0)
                 self.tab.set_hover_enabled(True)
 
             self.back_anim_group.finished.connect(on_back_finished)

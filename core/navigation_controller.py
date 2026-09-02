@@ -16,6 +16,21 @@ class NavigationController:
             self.main.ui_playlist.go_to_dashboard(reset_history=True)
             return
 
+        # Player Full <-> Mini: animam artwork-ul care isi schimba marimea.
+        # Reintram in aceeasi metoda (protejati de flag), ca restul logicii sa
+        # ramana exact la fel.
+        switching_player_size = (
+            (index == 0 and self.main.ui_player.current_mode == "MINI")
+            or (index != 0 and self.main.ui_player.current_mode == "FULL")
+        )
+        if switching_player_size and not getattr(self.anim_manager, '_in_artwork_resize', False):
+            self.anim_manager._in_artwork_resize = True
+            try:
+                self.anim_manager.animate_player_artwork_resize(lambda: self.on_tab_changed(index))
+            finally:
+                self.anim_manager._in_artwork_resize = False
+            return
+
         updates_suspended = False
 
         try:
