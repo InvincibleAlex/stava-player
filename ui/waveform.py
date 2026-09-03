@@ -57,6 +57,7 @@ class WaveformWidget(QWidget):
         # de pixeli ai ferestrei (fluent pe fereastra mica, lag pe fullscreen).
         self._frame_buffer = None
         self._frame_buffer_key = None
+        self._painting_frame = False
         self._fade_mask = None
         self._fade_mask_key = None
 
@@ -172,23 +173,15 @@ class WaveformWidget(QWidget):
         if needs_update: self.update()
 
     def set_zoom_factor(self, factor):
-        # Acelasi motiv ca la set_theme_colors: render_chunks() e costisitor
-        # (~60ms) si depinde doar de peaks, stride, bar_width, bar_gap si
-        # chunk_width - nu de marimea widget-ului. Metoda asta e chemata la
-        # fiecare comutare Full<->Mini prin _update_dynamic_sizes, cu acelasi
-        # zoom, deci refacea cache-ul degeaba si bloca firul in mijlocul
-        # animatiei de tranzitie.
-        new_zoom = max(0.6, float(factor))
-        new_bar_width = max(3, int(self.base_bar_width * new_zoom))
-        new_bar_gap = max(2, int(self.base_bar_gap * new_zoom))
-        if (new_zoom == self.zoom_factor
-                and new_bar_width == self.bar_width
-                and new_bar_gap == self.bar_gap):
-            return
-
-        self.zoom_factor = new_zoom
-        self.bar_width = new_bar_width
-        self.bar_gap = new_bar_gap
+        # NOTA: s-a incercat sarirea peste render_chunks() cand zoom-ul nu se
+        # schimba (castig masurat: pauza maxima intre cadre 161ms -> 32ms), dar
+        # asta declanseaza desenari imbricate ("A paint device can only be painted
+        # by one painter at a time") si, dupa ~50 de tranzitii, access violation.
+        # Masurat: cu protectia -> 63 conflicte, fara ea -> 0. Cauza exacta a
+        # dependentei nu e inca lamurita, deci pastram apelul neconditionat.
+        self.zoom_factor = max(0.6, float(factor))
+        self.bar_width = max(3, int(self.base_bar_width * self.zoom_factor))
+        self.bar_gap = max(2, int(self.base_bar_gap * self.zoom_factor))
         self.render_chunks()
         self.update()
 
@@ -540,13 +533,24 @@ class WaveformWidget(QWidget):
         phys_w = max(1, int(w * dpr))
         phys_h = max(1, int(h * dpr))
         buffer_key = (phys_w, phys_h)
-        if self._frame_buffer is None or self._frame_buffer_key != buffer_key:
-            self._frame_buffer = QPixmap(phys_w, phys_h)
-            self._frame_buffer.setDevicePixelRatio(dpr)
-            self._frame_buffer_key = buffer_key
-        wave_pix = self._frame_buffer
+        # Buffer-ul e persistent, dar paintEvent poate fi reintrat: cand widget-ul
+        # are un efect grafic, Qt il randeaza inca o data intr-un pixmap de efect,
+        # din interiorul desenarii curente. Doua desenari pe ACELASI pixmap dau
+        # "A paint device can only be painted by one painter at a time", starea
+        # ramane inconsistenta si aplicatia cade dupa destule tranzitii. In cazul
+        # reintrat folosim un pixmap propriu, ca inainte de a exista buffer-ul.
+        if self._painting_frame:
+            wave_pix = QPixmap(phys_w, phys_h)
+            wave_pix.setDevicePixelRatio(dpr)
+        else:
+            if self._frame_buffer is None or self._frame_buffer_key != buffer_key:
+                self._frame_buffer = QPixmap(phys_w, phys_h)
+                self._frame_buffer.setDevicePixelRatio(dpr)
+                self._frame_buffer_key = buffer_key
+            wave_pix = self._frame_buffer
         wave_pix.fill(Qt.GlobalColor.transparent)
 
+        self._painting_frame = True
         p = QPainter(wave_pix) # Painter-ul temporar
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
@@ -640,6 +644,7 @@ class WaveformWidget(QWidget):
             p.drawPixmap(0, 0, self._fade_mask)
 
         p.end() # Terminăm desenarea pe buffer
+        self._painting_frame = False
 
         # 5. Desenăm Buffer-ul pe Widget
         painter.drawPixmap(0, 0, wave_pix)
