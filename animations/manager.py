@@ -6,6 +6,11 @@ from PyQt6.QtGui import QPixmap, QIcon
 from .overlay import TransitionOverlay
 
 class AnimationManager:
+    # Fade-ul continutului din Player (tot in afara de artwork) la trecerea
+    # Full <-> Mini. Tinut scurt ca sa nu intarzie vizibil schimbarea de tab.
+    NON_ART_FADE_OUT_MS = 130
+    NON_ART_FADE_IN_MS = 200
+
     def __init__(self, main_window):
         self.main = main_window
         self.speed_move = 350
@@ -188,7 +193,9 @@ class AnimationManager:
 
     def animate_player_artwork_resize(self, rebuild_fn):
         """ Artwork-ul isi schimba animat marimea cand Player-ul trece intre
-        Full si Mini (se micsoreaza sau se mareste, dupa caz).
+        Full si Mini (se micsoreaza sau se mareste, dupa caz), iar restul
+        continutului (titlu, artist, waveform, butoane) face fade out inainte
+        de schimbare si fade in in timp ce artwork-ul aluneca.
 
         Deliberat izolata: nu foloseste self.main.anim_group, _cleanup(),
         _create_overlay_anim() sau listele comune (_overlays/_effects_targets),
@@ -206,10 +213,44 @@ class AnimationManager:
             if prev_anim.state() == QPropertyAnimation.State.Running:
                 prev_anim.stop()
             self._artwork_resize_anim = None
-        if lbl_art:
+
+        # stop() NU emite 'finished' in Qt, deci done() nu a rulat si overlay-ul
+        # animatiei intrerupte e inca pe ecran. Daca l-am abandona, la comutari
+        # rapide s-ar aduna mai multe artwork-uri suprapuse. Il preluam si
+        # continuam animatia din locul in care a ramas.
+        carried_overlay = getattr(self, '_artwork_resize_overlay', None)
+        try:
+            if carried_overlay is not None and not carried_overlay.isVisible():
+                carried_overlay = None
+        except RuntimeError: # obiectul C++ a fost deja distrus
+            carried_overlay = None
+        if carried_overlay is None:
+            self._artwork_resize_overlay = None
+
+        # Artwork-ul real ramane ascuns cat timp overlay-ul preluat il acopera.
+        if lbl_art and carried_overlay is None:
             lbl_art.setVisible(True)
 
-        start_rect = self.get_global_rect(lbl_art) if lbl_art else None
+        # Token de generatie: fade in-ul continutului e programat pe timer, deci
+        # un click urmator trebuie sa-l poata invalida pe cel in asteptare.
+        token = getattr(self, '_artwork_resize_token', 0) + 1
+        self._artwork_resize_token = token
+
+        # rebuild_fn reintra in on_tab_changed, care se uita la acest flag ca sa
+        # nu porneasca inca o animatie.
+        def guarded_rebuild():
+            self._in_artwork_resize = True
+            try:
+                rebuild_fn()
+            finally:
+                self._in_artwork_resize = False
+
+        # Cand preluam un overlay intrerupt, pornim de unde a ramas el, nu de la
+        # pozitia din layout - altfel artwork-ul ar sari vizibil.
+        if carried_overlay is not None:
+            start_rect = QRect(carried_overlay.geometry())
+        else:
+            start_rect = self.get_global_rect(lbl_art) if lbl_art else None
         pixmap = None
         if lbl_art:
             if getattr(lbl_art, 'image_data', None):
@@ -219,75 +260,195 @@ class AnimationManager:
 
         # Fara imagine/geometrie valida nu avem ce anima - schimbam tabul normal.
         if not start_rect or not pixmap or pixmap.isNull():
-            rebuild_fn()
+            if carried_overlay is not None:
+                self._artwork_resize_overlay = None
+                try:
+                    carried_overlay.hide()
+                    carried_overlay.deleteLater()
+                except Exception:
+                    pass
+                if lbl_art:
+                    lbl_art.setVisible(True)
+            guarded_rebuild()
             return
 
         entering_full = (ui_player.current_mode == "MINI")
 
-        # Ascundem artwork-ul real INAINTE de rebuild, ca sa nu apuce sa se
-        # vada la marimea finala inainte de vreme. Folosim setVisible(False)
-        # (nu un QGraphicsOpacityEffect) - efectul de opacitate nu supravietuia
-        # reparent-arii facute de rebuild_fn() (Qt il reseteaza), asa ca
-        # artwork-ul real redevenea vizibil la locul lui in timpul animatiei.
-        # setVisible(False) e o ascundere reala, nu doar vizuala, si nu poate
-        # fi anulata de reparent-are.
-        lbl_art.setVisible(False)
+        # animate_transition_to_player isi face singura fade-ul continutului si
+        # se bazeaza pe faptul ca on_tab_changed(0) termina rebuild-ul inainte de
+        # a-i masura destinatiile - acolo rulam sincron, fara fade.
+        do_fade = not getattr(self, '_suppress_artwork_resize_fade', False)
 
-        rebuild_fn()
+        # run_resize poate fi chemat din doua locuri (semnalul de final al fade
+        # out-ului si plasa de siguranta) - are voie sa ruleze o singura data.
+        state = {'ran': False}
 
-        art_c = getattr(ui_player, 'artwork_container', None)
+        def run_resize():
+            if getattr(self, '_artwork_resize_token', 0) != token:
+                return
+            if state['ran']:
+                return
+            state['ran'] = True
 
-        # La intrarea in Full, set_mode_full() nu primeste nicio latime tinta
-        # explicita (spre deosebire de Mini, unde _apply_tab_change() calculeaza
-        # si fixeaza deja inaltimea corecta) - fortam layout-ul sa se aseze
-        # inainte de masuratoare, altfel citim inca latimea veche (mica) si
-        # animatia nu are unde sa se duca (start_rect == end_rect). La iesirea
-        # din Full NU atingem inaltimea - e deja corecta, orice recalculare aici
-        # ar suprascrie-o cu o valoare intermediara, gresita.
-        if entering_full:
-            if ui_player.layout():
-                ui_player.layout().activate()
-            if art_c:
-                cw = art_c.width()
-                if cw > 0 and art_c.height() != cw:
-                    art_c.setFixedHeight(cw)
-                if art_c.layout():
-                    art_c.layout().activate()
+            # Ascundem artwork-ul real INAINTE de rebuild, ca sa nu apuce sa se
+            # vada la marimea finala inainte de vreme. Folosim setVisible(False)
+            # (nu un QGraphicsOpacityEffect) - efectul de opacitate nu supravietuia
+            # reparent-arii facute de rebuild_fn() (Qt il reseteaza), asa ca
+            # artwork-ul real redevenea vizibil la locul lui in timpul animatiei.
+            # setVisible(False) e o ascundere reala, nu doar vizuala, si nu poate
+            # fi anulata de reparent-are.
+            lbl_art.setVisible(False)
+
+            guarded_rebuild()
+
+            # Rebuild-ul trece prin animate_stack_switch -> _stop_previous_animation()
+            # -> _cleanup(), care face lbl_art.setHidden(False). Fara re-ascundere
+            # artwork-ul real apare la destinatie in timp ce overlay-ul inca aluneca
+            # (se vad doua artwork-uri) si flash-uie inainte de animatie.
+            lbl_art.setVisible(False)
+
+            # Rebuild-ul reconstruieste layout-ul si sterge efectele grafice
+            # (_clear_player_transition_effects), deci punem opacitatea 0 la loc
+            # abia acum, pe widget-urile noi, ca sa avem de unde face fade in.
+            if do_fade and hasattr(ui_player, 'set_non_art_controls_opacity'):
+                try:
+                    ui_player.set_non_art_controls_opacity(0.0)
+                except Exception:
+                    pass
+
+            art_c = getattr(ui_player, 'artwork_container', None)
+
+            # La intrarea in Full, set_mode_full() nu primeste nicio latime tinta
+            # explicita (spre deosebire de Mini, unde _apply_tab_change() calculeaza
+            # si fixeaza deja inaltimea corecta) - fortam layout-ul sa se aseze
+            # inainte de masuratoare, altfel citim inca latimea veche (mica) si
+            # animatia nu are unde sa se duca (start_rect == end_rect). La iesirea
+            # din Full NU atingem inaltimea - e deja corecta, orice recalculare aici
+            # ar suprascrie-o cu o valoare intermediara, gresita.
+            if entering_full:
+                if ui_player.layout():
+                    ui_player.layout().activate()
+                if art_c:
+                    cw = art_c.width()
+                    if cw > 0 and art_c.height() != cw:
+                        art_c.setFixedHeight(cw)
+                    if art_c.layout():
+                        art_c.layout().activate()
+
+            # Overlay-ul se pregateste INAINTE de orice redesenare. Artwork-ul real
+            # e ascuns, deci orice cadru desenat pana acum ar arata un gol in locul
+            # lui - exact flash-ul de la trecerea in Mini. Pus la start_rect, el
+            # acopera pozitia veche si tranzitia e continua.
+            # Daca am preluat overlay-ul unei animatii intrerupte, il refolosim:
+            # asa ramane un singur artwork pe ecran, oricat de repede se comuta.
+            overlay = carried_overlay
+            if overlay is None:
+                overlay = TransitionOverlay(self.main)
+                overlay.setScaledContents(True)
+                overlay.radius = 20.0
+                overlay.render_mode = "cover"
+            overlay.setPixmap(pixmap)
+            overlay.setGeometry(start_rect)
+            overlay.raise_() # aceeasi ordine ca la animate_transition_to_player (functionala)
+            overlay.show()
+            self._artwork_resize_overlay = overlay
+
+
+            # Golim coada de evenimente in AMBELE sensuri. Rebuild-ul ruleaza
+            # acum dintr-un timer, nu din slotul de click, si fara asta fereastra
+            # ramane nedesenata (blocata pe ultimul cadru al fade out-ului) pana
+            # cand un eveniment de mouse forteaza repaint-ul.
             QCoreApplication.sendPostedEvents(None, 0)
 
-        if art_c and art_c.width() > 0:
-            end_rect = self.get_global_rect(art_c)
+            # on_tab_changed suspenda desenarea waveform-ului si o reactiveaza
+            # abia 120ms mai tarziu. Un widget vizibil cu setUpdatesEnabled(False)
+            # inghite cererea de repaint a ferestrei, iar animatia de mai jos ar
+            # rula fara sa se vada nimic. Il reactivam acum; ramane invizibil
+            # oricum, pentru ca opacity_factor e inca 0 si fade-ul lui porneste
+            # la timpul lui.
+            waveform = getattr(ui_player, 'waveform', None)
+            if waveform is not None:
+                try:
+                    if hasattr(waveform, 'suspend_visual_updates'):
+                        waveform.suspend_visual_updates(False)
+                    else:
+                        waveform.setUpdatesEnabled(True)
+                except Exception:
+                    pass
+
+            # Cererea de repaint inghitita mai devreme nu se mai reemite singura:
+            # un repaint sincron deblocheaza fereastra inainte de animatie.
+            self.main.repaint()
+
+            # Destinatia se masoara abia dupa ce layout-ul s-a asezat.
+            if art_c and art_c.width() > 0:
+                end_rect = self.get_global_rect(art_c)
+            else:
+                end_rect = self.get_global_rect(lbl_art)
+                end_rect.setHeight(end_rect.width())
+
+            group = QParallelAnimationGroup()
+            self._add_anim(group, overlay, b"geometry", start_rect, end_rect, self.speed_move)
+
+            def done():
+                if getattr(self, '_artwork_resize_overlay', None) is overlay:
+                    self._artwork_resize_overlay = None
+                try:
+                    overlay.hide()
+                    overlay.deleteLater()
+                except Exception:
+                    pass
+                try:
+                    lbl_art.setVisible(True)
+                except Exception:
+                    pass
+                self._artwork_resize_anim = None
+
+            group.finished.connect(done)
+            self._artwork_resize_anim = group # pastram referinta ca sa nu fie colectata
+            group.start()
+
+            self.main.update()
+
+            # Continutul reapare cat timp artwork-ul inca aluneca spre pozitia
+            # noua, ca tranzitia sa nu para in doi timpi separati.
+            def fade_in_controls():
+                # Daca intre timp a pornit alta tranzitie, ea decide cand reapare.
+                if getattr(self, '_artwork_resize_token', 0) != token:
+                    return
+                if hasattr(ui_player, 'fade_non_art_controls_in'):
+                    ui_player.fade_non_art_controls_in(
+                        delay_ms=0,
+                        duration_ms=self.NON_ART_FADE_IN_MS,
+                    )
+
+            if do_fade:
+                QTimer.singleShot(int(self.speed_move * 0.45), fade_in_controls)
+
+        if not do_fade:
+            run_resize()
+        elif hasattr(ui_player, 'fade_non_art_controls_out'):
+            ui_player.fade_non_art_controls_out(
+                on_finished=run_resize,
+                duration_ms=self.NON_ART_FADE_OUT_MS,
+            )
+            # Plasa de siguranta: daca cineva sterge efectele in timpul fade
+            # out-ului (setGraphicsEffect(None) distruge efectul animat), Qt
+            # opreste grupul si NU mai emite 'finished' - fara asta schimbarea
+            # de tab ar ramane blocata dupa fade out.
+            QTimer.singleShot(self.NON_ART_FADE_OUT_MS + 80, run_resize)
         else:
-            end_rect = self.get_global_rect(lbl_art)
-            end_rect.setHeight(end_rect.width())
+            run_resize()
 
-        overlay = TransitionOverlay(self.main)
-        overlay.setPixmap(pixmap)
-        overlay.setScaledContents(True)
-        overlay.setGeometry(start_rect)
-        overlay.radius = 20.0
-        overlay.render_mode = "cover"
-        overlay.raise_() # aceeasi ordine ca la animate_transition_to_player (functionala)
-        overlay.show()
-
-        group = QParallelAnimationGroup()
-        self._add_anim(group, overlay, b"geometry", start_rect, end_rect, self.speed_move)
-
-        def done():
-            try:
-                overlay.hide()
-                overlay.deleteLater()
-            except Exception:
-                pass
-            try:
-                lbl_art.setVisible(True)
-            except Exception:
-                pass
-            self._artwork_resize_anim = None
-
-        group.finished.connect(done)
-        self._artwork_resize_anim = group # pastram referinta ca sa nu fie colectata
-        group.start()
+    def _switch_to_player_tab_sync(self):
+        """ on_tab_changed(0) fara fade-ul de continut, ca rebuild-ul de layout
+        sa se termine inainte de a returna (animatia de aici masoara imediat
+        dupa destinatiile din player). """
+        self._suppress_artwork_resize_fade = True
+        try:
+            self.main.on_tab_changed(0)
+        finally:
+            self._suppress_artwork_resize_fade = False
 
     def animate_transition_to_player(self, filepath=None):
         self._stop_previous_animation() # 🔥 STOP & CLEANUP
@@ -315,12 +476,12 @@ class AnimationManager:
 
         if not start_rect or not pixmap:
             self.main.navbar.buttons[0].setChecked(True)
-            self.main.on_tab_changed(0)
+            self._switch_to_player_tab_sync()
             return
 
         # 2. Switch Tab & Layout Update
         self.main.navbar.buttons[0].setChecked(True)
-        self.main.on_tab_changed(0)
+        self._switch_to_player_tab_sync()
         self.main.ui_player.layout().activate()
         self.main.ui_player.adjustSize()
         QCoreApplication.sendPostedEvents(None, 0)
