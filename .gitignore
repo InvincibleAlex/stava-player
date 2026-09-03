@@ -6,3 +6,6 @@ build/
 dist/
 *.log
 .DS_Store
+
+# Setarile si starea locala (cai personale, ultima piesa, geometrie)
+settings.ini
