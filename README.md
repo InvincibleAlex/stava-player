@@ -1,72 +1,76 @@
 # STAVA Player
 
-Player audio pentru desktop, scris în Python cu PyQt6 și motorul audio BASS.
+A desktop audio player written in Python with PyQt6 and the BASS audio engine.
 
-**Gratuit și fără scop comercial.** Nu se percep bani pentru acest proiect, nici
-acum, nici mai târziu. Vezi [LICENSE](LICENSE).
+**Free and non-commercial.** No money is charged for this project, now or later.
+See [LICENSE](LICENSE).
 
 ---
 
-## Ce face
+## Features
 
-- **Redare** MP3, FLAC, WAV, OGG, M4A, prin motorul nativ BASS
-- **Egalizator** cu 10 benzi, preamp, control de bas și înalte
-- **Efecte** — spațializare, reverb, tempo, limitator, plus suport pentru
-  plugin-uri VST
-- **Bibliotecă** cu scanare pe foldere, albume, artiști, piese cele mai ascultate
-  și coadă de redare, toate ținute într-o bază SQLite locală
-- **Waveform** pre-randat și vizualizator FFT
-- **Player în două moduri** — mare, cu artwork și waveform, sau compact lângă
-  bibliotecă
-- **Discord Rich Presence**, opțional
-- **Teme** și zoom reglabil pentru întreaga interfață
+- **Playback** of MP3, FLAC, WAV, OGG and M4A through the native BASS engine
+- **Equalizer** with 10 bands, preamp, and bass/treble controls
+- **Effects** — spatial widening, reverb, tempo, limiter, plus VST plugin support
+- **Library** with folder, album, artist, most-played and queue views, all backed
+  by a local SQLite database
+- **Waveform** rendered ahead of time, plus an FFT visualizer
+- **Two player modes** — full, with artwork and waveform, or compact beside the
+  library
+- **Discord Rich Presence**, optional
+- **Themes** and adjustable zoom for the whole interface
 
-## Cerințe
+## Requirements
 
-- Python 3.10 sau mai nou
-- Windows (motorul BASS e inclus pentru Windows; există și binare macOS în
-  `libs/`, dar aplicația e testată pe Windows)
+- Python 3.10 or newer
+- Windows (BASS binaries are bundled for Windows; macOS binaries are present in
+  `libs/`, but the app is tested on Windows)
 
-## Instalare
+## Installation
 
 ```bash
-git clone https://github.com/<utilizator>/stava-player.git
+git clone https://github.com/InvincibleAlex/stava-player.git
 cd stava-player
 
 python -m venv .venv
-.venv\Scripts\activate        # pe Windows
+.venv\Scripts\activate        # on Windows
 pip install -r requirements.txt
 
 python main.py
 ```
 
-La prima pornire aplicația își creează singură fișierul `settings.ini` cu valori
-implicite. Din **Setări → Playlist** alegi folderul cu muzică, iar de acolo
-scanarea pornește automat.
+On first launch the app creates its own `settings.ini` with default values. Pick
+your music folder from **Settings → Playlist**; scanning starts automatically
+from there.
 
-## Structura proiectului
+## Project layout
 
-| Director | Rol |
+| Directory | Purpose |
 |---|---|
-| `audio/` | motorul de redare, legătura cu BASS și lanțul de efecte |
-| `core/` | orchestrare: sesiune, redare, navigare, evenimente, Discord |
-| `playlist/` | bibliotecă, scanare, bază de date, interfața de playlist |
-| `tabs/` | ecranele principale — Player, EQ, Playlist, Setări |
-| `player/` | widget-urile player-ului și cele două layout-uri |
-| `Eq/`, `ui/`, `animations/`, `background/` | componente vizuale și tranziții |
-| `libs/` | BASS și plugin-urile VST |
+| `audio/` | playback engine, BASS bindings and the effects chain |
+| `core/` | orchestration: session, playback, navigation, events, Discord |
+| `playlist/` | library, scanning, database, playlist interface |
+| `tabs/` | main screens — Player, EQ, Playlist, Settings |
+| `player/` | player widgets and the two layouts |
+| `Eq/`, `ui/`, `animations/`, `background/` | visual components and transitions |
+| `libs/` | BASS and the VST plugins |
 
-## Note
+## Notes
 
-**Discord Rich Presence** vine cu un Client ID implicit, ca funcția să meargă
-fără nicio configurare. Nu e un secret: orice aplicație care folosește Rich
-Presence îl trimite către Discord de la fiecare utilizator. Îl poți înlocui cu
-ID-ul propriei aplicații Discord din **Setări → Discord**.
+**Discord Rich Presence** ships with a default Client ID so the feature works
+without any setup. It is not a secret: every application using Rich Presence
+sends its Client ID to Discord from each user. You can replace it with your own
+Discord application ID under **Settings → Discord**.
 
-**`settings.ini` nu este inclus în repo.** Conține preferințe și căi locale,
-diferite de la o instalare la alta, și se generează singur.
+**`settings.ini` is not included in the repository.** It holds preferences and
+local paths that differ between installations, and it is generated
+automatically.
 
-## Licență
+**The interface is in Romanian.**
 
-Cod: [MIT](LICENSE). Bibliotecile din `libs/` aparțin autorilor lor și au
-licențele proprii — BASS este gratuit pentru utilizare necomercială.
+## Licence
+
+Source code: [MIT](LICENSE). The libraries bundled under `libs/` belong to their
+respective authors and carry their own terms — see
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). BASS is free for
+non-commercial use.

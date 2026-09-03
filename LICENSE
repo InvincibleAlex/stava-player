@@ -19,18 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-NOTĂ PRIVIND COMPONENTELE TERȚE
-
-Licența MIT de mai sus acoperă codul acestui proiect. Bibliotecile și
-plugin-urile incluse în directorul `libs/` aparțin autorilor lor și sunt
-guvernate de propriile licențe:
-
-- BASS, BASS_FX, BASSFLAC, BASS_VST (un4seen developments) — gratuite pentru
-  utilizare necomercială. Vezi https://www.un4seen.com/
-- Plugin-urile VST din `libs/VST/` aparțin producătorilor respectivi.
-
-Acest proiect este oferit gratuit. Nu se percep bani pentru el și nu are scop
-comercial.
