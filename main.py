@@ -280,6 +280,7 @@ class MainApp(QMainWindow):
         
         self.anim_manager = AnimationManager(self)
         self._apply_animation_speed_settings()
+        self._apply_fade_speed_settings()
         self.discord_presence = DiscordPresenceManager(self.settings)
         self.bg_manager = BackgroundManager(self)
         self.nav_controller = NavigationController(self)
@@ -300,9 +301,18 @@ class MainApp(QMainWindow):
             speed_ms = 350
 
         speed_ms = max(120, min(900, speed_ms))
+        # Doar deplasarile; fade-urile au reglajul lor separat.
         self.anim_manager.speed_move = speed_ms
-        self.anim_manager.speed_fade_in = speed_ms
-        self.anim_manager.speed_fade_out = speed_ms
+
+    def _apply_fade_speed_settings(self, value=None):
+        default_ms = self.anim_manager.DEFAULT_FADE_SPEED_MS
+        try:
+            fade_ms = int(value if value is not None
+                          else self.settings.value("fade_speed_ms", default_ms, type=int))
+        except:
+            fade_ms = default_ms
+
+        self.anim_manager.set_fade_speed(fade_ms)
 
     def _refresh_discord_presence_settings(self):
         if hasattr(self, 'discord_presence'):

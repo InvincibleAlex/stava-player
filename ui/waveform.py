@@ -172,9 +172,23 @@ class WaveformWidget(QWidget):
         if needs_update: self.update()
 
     def set_zoom_factor(self, factor):
-        self.zoom_factor = max(0.6, float(factor))
-        self.bar_width = max(3, int(self.base_bar_width * self.zoom_factor))
-        self.bar_gap = max(2, int(self.base_bar_gap * self.zoom_factor))
+        # Acelasi motiv ca la set_theme_colors: render_chunks() e costisitor
+        # (~60ms) si depinde doar de peaks, stride, bar_width, bar_gap si
+        # chunk_width - nu de marimea widget-ului. Metoda asta e chemata la
+        # fiecare comutare Full<->Mini prin _update_dynamic_sizes, cu acelasi
+        # zoom, deci refacea cache-ul degeaba si bloca firul in mijlocul
+        # animatiei de tranzitie.
+        new_zoom = max(0.6, float(factor))
+        new_bar_width = max(3, int(self.base_bar_width * new_zoom))
+        new_bar_gap = max(2, int(self.base_bar_gap * new_zoom))
+        if (new_zoom == self.zoom_factor
+                and new_bar_width == self.bar_width
+                and new_bar_gap == self.bar_gap):
+            return
+
+        self.zoom_factor = new_zoom
+        self.bar_width = new_bar_width
+        self.bar_gap = new_bar_gap
         self.render_chunks()
         self.update()
 

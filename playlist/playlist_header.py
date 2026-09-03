@@ -64,9 +64,15 @@ class PlaylistHeader(QWidget):
         if not self.isVisible() or self.width() < 50: return
 
         if self.is_compact:
-            target_h = 80 # Bază pentru compact; îl ridicăm dacă layout-ul cere mai mult la zoom.
+            # Aceeasi formula ca in tab_playlist (_stabilize_after_show si
+            # resizeEvent): inaltimea compacta o da minimul layout-ului. Aici era
+            # inainte un prag fix de 80px, care nu se potrivea cu cei ~70px pe
+            # care ii da layout-ul - asa ca reintrarea pe dashboard crestea
+            # header-ul si impingea lista in jos.
             if self.layout():
-                target_h = max(target_h, self.layout().minimumSize().height())
+                target_h = self.layout().minimumSize().height()
+            else:
+                target_h = 80
             # 🔥 FIX: Dacă e compact, forțăm înălțimea și ieșim. Nu lăsăm layout-ul să o modifice.
             if self.height() != target_h:
                 self.setFixedHeight(target_h)

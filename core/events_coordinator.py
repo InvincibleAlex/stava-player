@@ -197,6 +197,11 @@ class EventsCoordinator:
                 self.main._apply_animation_speed_settings(value)
             except:
                 pass
+        elif key == "fade_speed_ms":
+            try:
+                self.main._apply_fade_speed_settings(value)
+            except:
+                pass
         elif key in {
             "playlist_overscroll_enabled",
             "playlist_overscroll_max_px",
