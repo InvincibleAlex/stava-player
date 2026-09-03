@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLa
 from PyQt6.QtCore import Qt, pyqtSignal, QSettings, QSize, QPropertyAnimation, QEasingCurve, QTimer
 from PyQt6.QtGui import QIcon, QColor
 import core.themes as themes
+from core.discord_presence import DEFAULT_DISCORD_CLIENT_ID
 from Eq.knobs import AudioKnob
 from core.utils import IconHelper, get_cache_root, get_settings_path
 from playlist.playlist_scanner import PlaylistScanner
@@ -307,7 +308,10 @@ class SettingsTab(QWidget):
         self.chk_discord_presence.setChecked(self.settings.value("discord_presence_enabled", False, type=bool))
         self.chk_discord_presence.toggled.connect(lambda checked: self._save_setting_value("discord_presence_enabled", bool(checked)))
 
-        self.input_discord_client_id = QLineEdit(str(self.settings.value("discord_client_id", "", type=str) or ""))
+        self.input_discord_client_id = QLineEdit(str(
+            self.settings.value("discord_client_id", DEFAULT_DISCORD_CLIENT_ID, type=str)
+            or DEFAULT_DISCORD_CLIENT_ID
+        ))
         self.input_discord_client_id.setPlaceholderText("Discord application client ID")
         self.input_discord_client_id.editingFinished.connect(lambda: self._save_setting_value("discord_client_id", self.input_discord_client_id.text().strip()))
 
@@ -358,12 +362,21 @@ class SettingsTab(QWidget):
         self.input_discord_pause_small_image.setPlaceholderText("Pause small image key or URL")
         self.input_discord_pause_small_image.editingFinished.connect(lambda: self._save_setting_value("discord_pause_small_image_key", self.input_discord_pause_small_image.text().strip()))
 
+        self.lbl_discord_client_note = QLabel(
+            "Codul completat este cel implicit al aplicației și permite funcționarea "
+            "Rich Presence fără nicio configurare. Îl poți înlocui cu ID-ul propriei "
+            "aplicații Discord dacă preferi ca activitatea să apară sub numele tău."
+        )
+        self.lbl_discord_client_note.setWordWrap(True)
+        self.lbl_discord_client_note.setStyleSheet("font-size: 11px;")
+
         self.lbl_discord_note = QLabel("Poți folosi asset keys sau URL-uri directe pentru imaginea mare și iconița mică. Artwork-ul mare poate fi găsit automat online, Activity Type schimbă felul în care Discord afișează cardul, iar Pause Behavior controlează ce se întâmplă când oprești piesa.")
         self.lbl_discord_note.setWordWrap(True)
         self.lbl_discord_note.setStyleSheet("font-size: 11px;")
 
         discord_layout.addRow(self.chk_discord_presence)
         discord_layout.addRow("Client ID:", self.input_discord_client_id)
+        discord_layout.addRow("", self.lbl_discord_client_note)
         discord_layout.addRow("Activity Type:", self.combo_discord_activity_type)
         discord_layout.addRow("Pause Behavior:", self.combo_discord_pause_behavior)
         discord_layout.addRow("Online Artwork:", self.chk_discord_online_artwork)
@@ -1225,7 +1238,7 @@ class SettingsTab(QWidget):
             "playlist_overscroll_spread_strength": {"type": "float", "min": 0.0, "max": 1.2, "default": 0.52},
             "playlist_overscroll_falloff_ratio": {"type": "float", "min": 0.18, "max": 0.85, "default": 0.50},
             "discord_presence_enabled": {"type": "bool", "default": False},
-            "discord_client_id": {"type": "str", "default": ""},
+            "discord_client_id": {"type": "str", "default": DEFAULT_DISCORD_CLIENT_ID},
             "discord_activity_type": {"type": "enum", "values": ["playing", "listening"], "default": "listening"},
             "discord_pause_behavior": {"type": "enum", "values": ["show_paused_position", "keep_running_timer", "hide_presence"], "default": "show_paused_position"},
             "discord_online_artwork_enabled": {"type": "bool", "default": True},

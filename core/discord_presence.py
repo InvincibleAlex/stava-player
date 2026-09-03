@@ -6,6 +6,12 @@ from PyQt6.QtCore import QObject, pyqtSignal
 
 from core.discord_artwork_lookup import DiscordArtworkLookup
 
+# ID-ul aplicatiei Discord sub care ruleaza Rich Presence in mod implicit, ca
+# functia sa mearga fara nicio configurare. Nu e un secret: orice aplicatie care
+# foloseste Rich Presence il trimite catre Discord de la fiecare utilizator.
+# Secretele (client secret, bot token) nu apar nicaieri in proiect.
+DEFAULT_DISCORD_CLIENT_ID = "1489916708696232097"
+
 try:
     from pypresence import Presence
     HAS_DISCORD_RPC = True
@@ -71,7 +77,10 @@ class DiscordPresenceManager(QObject):
 
     def refresh_from_settings(self):
         new_enabled = self.settings.value("discord_presence_enabled", False, type=bool)
-        new_client_id = str(self.settings.value("discord_client_id", "", type=str) or "").strip()
+        new_client_id = str(
+            self.settings.value("discord_client_id", DEFAULT_DISCORD_CLIENT_ID, type=str)
+            or DEFAULT_DISCORD_CLIENT_ID
+        ).strip()
         new_large_image_key = str(self.settings.value("discord_large_image_key", "", type=str) or "").strip()
         new_online_artwork_enabled = self.settings.value("discord_online_artwork_enabled", True, type=bool)
         new_small_status_icons_enabled = self.settings.value("discord_small_status_icons_enabled", True, type=bool)
