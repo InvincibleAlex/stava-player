@@ -55,10 +55,6 @@ class NavigationController:
                 self.main.split_layout.setStretch(0, 1)
                 self.main.split_layout.setStretch(1, 0)
             else:
-                # Venind din Player Full stiva era doar ascunsa, deci pagina
-                # curenta a ramas cea de dinainte. Retinem asta ca sa stim ca
-                # tot continutul reapare, nu doar cand se schimba pagina.
-                stack_was_hidden = not self.main.right_stack.isVisible()
                 self.main.right_stack.show()
                 needs_layout_switch = self.main.ui_player.current_mode != "MINI"
 
@@ -96,14 +92,7 @@ class NavigationController:
                 elif index == 3:
                     target = getattr(self.main, "ui_settings", None) or getattr(self.main, "placeholder_settings", None)
 
-                if stack_was_hidden:
-                    # Nu are rost sa facem fade out paginii vechi - stiva era
-                    # ascunsa. Doar aducem pagina ceruta si o facem sa apara
-                    # gradual, la fel ca la orice alta schimbare de tab.
-                    if target:
-                        self.main.right_stack.setCurrentWidget(target)
-                        self.anim_manager.fade_in_stack_widget(target)
-                elif self.main.right_stack.isVisible() and self.main.right_stack.currentWidget() != target:
+                if self.main.right_stack.isVisible() and self.main.right_stack.currentWidget() != target:
                     self.anim_manager.animate_stack_switch(
                         self.main.right_stack,
                         self.main.right_stack.currentWidget(),
@@ -141,19 +130,6 @@ class NavigationController:
         ui_player = getattr(self.main, "ui_player", None)
         if not ui_player:
             return
-
-        # Oprim intai animatiile care tintesc aceste efecte. setGraphicsEffect(None)
-        # sterge efectul, iar o animatie ramasa fara tinta ("Changing state of an
-        # animation without target") lasa masinaria de randare a efectelor intr-o
-        # stare inconsistenta: apar pictori Qt imbricati ("A paint device can only
-        # be painted by one painter at a time") si, dupa destule tranzitii,
-        # aplicatia cade cu access violation.
-        fade_group = getattr(ui_player, "_non_art_fade_group", None)
-        if fade_group is not None:
-            try:
-                fade_group.stop()
-            except Exception:
-                pass
 
         widgets = [ui_player, getattr(ui_player, "lbl_art", None)]
         if hasattr(ui_player, "_non_art_transition_widgets"):

@@ -140,11 +140,6 @@ class SettingsTab(QWidget):
         self.knob_animation_speed.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.knob_animation_speed.value_changed.connect(self.on_animation_speed_change)
 
-        self.knob_fade_speed = AudioKnob("FADE SPEED", 60, 700, step=10.0, orientation='horizontal', format_str="{:.0f} ms")
-        self.knob_fade_speed.setValue(float(self.settings.value("fade_speed_ms", 200, type=int)))
-        self.knob_fade_speed.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.knob_fade_speed.value_changed.connect(self.on_fade_speed_change)
-
         self.group_playlist_overscroll = QGroupBox("Playlist Rubber Band")
         overscroll_layout = QVBoxLayout()
         overscroll_layout.setSpacing(8)
@@ -234,15 +229,7 @@ class SettingsTab(QWidget):
         # toate knob-urile sa porneasca din acelasi loc pe orizontala - altfel
         # fiecare rand are propriul QHBoxLayout, iar un text mai lung ("Viteza
         # Animatii:") impinge knob-ul lui mai la dreapta decat celelalte.
-        self.lbl_fade_speed = QLabel("🌫️ Viteză Fade:")
-        self.lbl_fade_speed.setStyleSheet("font-weight: bold;")
-        row_fade_speed = QHBoxLayout()
-        row_fade_speed.setSpacing(10)
-        row_fade_speed.addWidget(self.lbl_fade_speed, 0, Qt.AlignmentFlag.AlignVCenter)
-        row_fade_speed.addWidget(self.knob_fade_speed, 1)
-
-        aspect_labels = (self.lbl_theme, self.lbl_zoom, self.lbl_fft,
-                         self.lbl_animation_speed, self.lbl_fade_speed)
+        aspect_labels = (self.lbl_theme, self.lbl_zoom, self.lbl_fft, self.lbl_animation_speed)
         label_width = max(lbl.sizeHint().width() for lbl in aspect_labels)
         for lbl in aspect_labels:
             lbl.setMinimumWidth(label_width)
@@ -251,7 +238,6 @@ class SettingsTab(QWidget):
         app_layout.addLayout(row_zoom)
         app_layout.addLayout(row_fft)
         app_layout.addLayout(row_animation_speed)
-        app_layout.addLayout(row_fade_speed)
         app_layout.addWidget(self.group_playlist_overscroll)
         group_app.setLayout(app_layout)
         group_app.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
@@ -288,7 +274,7 @@ class SettingsTab(QWidget):
         # "ZOOM", "ANIM SPEED") si pastram doar valoarea - evita repetarea
         # textului si taierea titlurilor lungi intr-un container ingust.
         for knob in (
-            self.knob_zoom, self.knob_fft, self.knob_animation_speed, self.knob_fade_speed,
+            self.knob_zoom, self.knob_fft, self.knob_animation_speed,
             self.knob_playlist_overscroll_max, self.knob_playlist_overscroll_global,
             self.knob_playlist_overscroll_spread, self.knob_playlist_overscroll_falloff,
             self.knob_playlist_overscroll_return,
@@ -830,7 +816,6 @@ class SettingsTab(QWidget):
         self.lbl_zoom.setStyleSheet(f"font-weight: bold; color: {fg};")
         self.lbl_fft.setStyleSheet(f"font-weight: bold; color: {fg};")
         self.lbl_animation_speed.setStyleSheet(f"font-weight: bold; color: {fg};")
-        self.lbl_fade_speed.setStyleSheet(f"font-weight: bold; color: {fg};")
         if hasattr(self, 'group_playlist_overscroll'):
             self.group_playlist_overscroll.setStyleSheet(f"QGroupBox {{ color: {fg}; font-weight: bold; }}")
             self.chk_playlist_overscroll.setStyleSheet(f"color: {fg}; font-weight: 600;")
@@ -1185,9 +1170,6 @@ class SettingsTab(QWidget):
     def on_animation_speed_change(self, value):
         self._save_setting_value("animation_speed_ms", int(round(value)))
 
-    def on_fade_speed_change(self, value):
-        self._save_setting_value("fade_speed_ms", int(round(value)))
-
     def on_open_wider_ui(self):
         self.open_wider_ui_requested.emit()
 
@@ -1217,7 +1199,6 @@ class SettingsTab(QWidget):
             "theme": {"type": "enum", "values": list(themes.THEME_PALETTES.keys()), "default": "Dark"},
             "fft_bars": {"type": "int", "min": 10, "max": 128, "default": 42},
             "animation_speed_ms": {"type": "int", "min": 120, "max": 900, "default": 350},
-            "fade_speed_ms": {"type": "int", "min": 60, "max": 700, "default": 200},
             "playlist_overscroll_enabled": {"type": "bool", "default": True},
             "playlist_overscroll_max_px": {"type": "int", "min": 20, "max": 140, "default": 52},
             "playlist_overscroll_return_ms": {"type": "int", "min": 120, "max": 900, "default": 620},
@@ -1243,7 +1224,7 @@ class SettingsTab(QWidget):
         # Ascundem proprietățile interne să nu fie corupte de text box-uri
         hidden_keys = {
             "queue", "shuffled_queue", "geometry", "last_song", "last_position",
-            "eq_bands_values", "eq_preamp", "eq_bass_knob", "eq_treble_knob", "fft_bars", "animation_speed_ms", "fade_speed_ms",
+            "eq_bands_values", "eq_preamp", "eq_bass_knob", "eq_treble_knob", "fft_bars", "animation_speed_ms",
             "playlist_overscroll_enabled", "playlist_overscroll_max_px", "playlist_overscroll_return_ms",
             "playlist_overscroll_global_strength", "playlist_overscroll_spread_strength", "playlist_overscroll_falloff_ratio",
             "discord_presence_enabled", "discord_client_id", "discord_activity_type", "discord_pause_behavior", "discord_online_artwork_enabled", "discord_large_image_key",
@@ -1421,17 +1402,6 @@ class SettingsTab(QWidget):
                 self.knob_animation_speed.blockSignals(False)
             return
 
-        if key == "fade_speed_ms":
-            try:
-                v = int(value)
-            except:
-                return
-            if hasattr(self, 'knob_fade_speed'):
-                self.knob_fade_speed.blockSignals(True)
-                self.knob_fade_speed.setValue(float(v))
-                self.knob_fade_speed.blockSignals(False)
-            return
-
         overscroll_knobs = {
             "playlist_overscroll_max_px": ("knob_playlist_overscroll_max", int),
             "playlist_overscroll_return_ms": ("knob_playlist_overscroll_return", int),
@@ -1549,8 +1519,6 @@ class SettingsTab(QWidget):
             self.knob_fft.set_zoom_factor(z)
         if hasattr(self, 'knob_animation_speed'):
             self.knob_animation_speed.set_zoom_factor(z)
-        if hasattr(self, 'knob_fade_speed'):
-            self.knob_fade_speed.set_zoom_factor(z)
         for attr in (
             'knob_playlist_overscroll_max',
             'knob_playlist_overscroll_global',

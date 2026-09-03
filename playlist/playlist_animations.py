@@ -419,12 +419,7 @@ class PlaylistTabAnimations:
         self.tab.file_list.setGraphicsEffect(None)
         self.tab.ui.header.setGraphicsEffect(None)
 
-    def animate_playlist_page_switch(self, update_func, target_widget=None, total_duration=None):
-        if total_duration is None:
-            # Aceeasi reglare ca restul fade-urilor din aplicatie.
-            manager = getattr(self.tab.window(), 'anim_manager', None)
-            total_duration = int(getattr(manager, 'PAGE_SWITCH_MS', 240) or 240)
-
+    def animate_playlist_page_switch(self, update_func, target_widget=None, total_duration=240):
         current_widget = self.tab.stack.currentWidget()
         target_widget = target_widget or self.tab.page_browser
 
