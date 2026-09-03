@@ -6,13 +6,34 @@ from PyQt6.QtGui import QPixmap, QIcon
 from .overlay import TransitionOverlay
 
 class AnimationManager:
+    # Durata de referinta a fade-urilor. Restul se deriva din ea, pastrand
+    # proportiile alese vizual: la valoarea implicita ies exact duratele
+    # dinainte de a exista reglajul.
+    DEFAULT_FADE_SPEED_MS = 200
+
     def __init__(self, main_window):
         self.main = main_window
         self.speed_move = 350
-        self.speed_fade_in = 350
-        self.speed_fade_out = 350
+        self.set_fade_speed(self.DEFAULT_FADE_SPEED_MS)
         self._overlays = [] # Păstrăm referințe pentru cleanup
         self._effects_targets = [] # Widget-uri care au primit efecte grafice
+
+    def set_fade_speed(self, ms):
+        """ Un singur reglaj pentru fade-urile din aplicatie: schimbarea paginii
+        din dreapta (EQ / Playlist / Setari), paginile interne din Playlist si
+        aparitia Player-ului la intrarea dintr-o piesa. """
+        try:
+            ms = int(ms)
+        except (TypeError, ValueError):
+            ms = self.DEFAULT_FADE_SPEED_MS
+        ms = max(60, min(700, ms))
+
+        self.fade_speed_ms = ms
+        self.speed_fade_in = ms
+        self.speed_fade_out = ms
+        self.STACK_FADE_IN_MS = ms
+        self.STACK_FADE_OUT_MS = max(40, int(ms * 0.75))
+        self.PAGE_SWITCH_MS = max(80, int(ms * 1.2))
 
     def get_global_rect(self, widget):
         if not widget: return QRect()
@@ -206,10 +227,30 @@ class AnimationManager:
             if prev_anim.state() == QPropertyAnimation.State.Running:
                 prev_anim.stop()
             self._artwork_resize_anim = None
-        if lbl_art:
+
+        # stop() NU emite 'finished' in Qt, deci done() nu a rulat si overlay-ul
+        # animatiei intrerupte a ramas pe ecran. Fara asta, la comutari rapide se
+        # adunau mai multe artwork-uri suprapuse, blocate. Il preluam si continuam
+        # animatia din locul in care a ramas.
+        carried_overlay = getattr(self, '_artwork_resize_overlay', None)
+        try:
+            if carried_overlay is not None and not carried_overlay.isVisible():
+                carried_overlay = None
+        except RuntimeError: # obiectul C++ a fost deja distrus
+            carried_overlay = None
+        if carried_overlay is None:
+            self._artwork_resize_overlay = None
+
+        # Artwork-ul real ramane ascuns cat timp overlay-ul preluat il acopera.
+        if lbl_art and carried_overlay is None:
             lbl_art.setVisible(True)
 
-        start_rect = self.get_global_rect(lbl_art) if lbl_art else None
+        # Cand preluam un overlay intrerupt, pornim din locul in care a ramas,
+        # nu de la pozitia din layout - altfel artwork-ul ar sari vizibil.
+        if carried_overlay is not None:
+            start_rect = QRect(carried_overlay.geometry())
+        else:
+            start_rect = self.get_global_rect(lbl_art) if lbl_art else None
         pixmap = None
         if lbl_art:
             if getattr(lbl_art, 'image_data', None):
@@ -219,6 +260,15 @@ class AnimationManager:
 
         # Fara imagine/geometrie valida nu avem ce anima - schimbam tabul normal.
         if not start_rect or not pixmap or pixmap.isNull():
+            if carried_overlay is not None:
+                self._artwork_resize_overlay = None
+                try:
+                    carried_overlay.hide()
+                    carried_overlay.deleteLater()
+                except Exception:
+                    pass
+                if lbl_art:
+                    lbl_art.setVisible(True)
             rebuild_fn()
             return
 
@@ -261,19 +311,26 @@ class AnimationManager:
             end_rect = self.get_global_rect(lbl_art)
             end_rect.setHeight(end_rect.width())
 
-        overlay = TransitionOverlay(self.main)
+        # Refolosim overlay-ul preluat de la o animatie intrerupta, ca sa ramana
+        # unul singur pe ecran oricat de repede s-ar comuta.
+        overlay = carried_overlay
+        if overlay is None:
+            overlay = TransitionOverlay(self.main)
+            overlay.setScaledContents(True)
+            overlay.radius = 20.0
+            overlay.render_mode = "cover"
         overlay.setPixmap(pixmap)
-        overlay.setScaledContents(True)
         overlay.setGeometry(start_rect)
-        overlay.radius = 20.0
-        overlay.render_mode = "cover"
         overlay.raise_() # aceeasi ordine ca la animate_transition_to_player (functionala)
         overlay.show()
+        self._artwork_resize_overlay = overlay
 
         group = QParallelAnimationGroup()
         self._add_anim(group, overlay, b"geometry", start_rect, end_rect, self.speed_move)
 
         def done():
+            if getattr(self, '_artwork_resize_overlay', None) is overlay:
+                self._artwork_resize_overlay = None
             try:
                 overlay.hide()
                 overlay.deleteLater()
@@ -440,7 +497,7 @@ class AnimationManager:
         
         # 1. Fade Out Old
         self.main.anim_group = QParallelAnimationGroup()
-        self._add_fade_anim(self.main.anim_group, old_widget, 1.0, 0.0, 150)
+        self._add_fade_anim(self.main.anim_group, old_widget, 1.0, 0.0, self.STACK_FADE_OUT_MS)
         
         def after_fade_out():
             # 🔥 FIX: Pre-ascundem noul widget ÎNAINTE de switch pentru a preveni
@@ -459,7 +516,7 @@ class AnimationManager:
             
             # 3. Fade In New (reutilizăm efectul pre-aplicat)
             self.main.anim_group = QParallelAnimationGroup()
-            self._add_anim(self.main.anim_group, enter_eff, b"opacity", 0.0, 1.0, 200)
+            self._add_anim(self.main.anim_group, enter_eff, b"opacity", 0.0, 1.0, self.STACK_FADE_IN_MS)
             
             def after_fade_in():
                 new_widget.setGraphicsEffect(None) # Cleanup new
