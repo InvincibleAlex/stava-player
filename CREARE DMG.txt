@@ -1,16 +1,45 @@
 Build macOS (.app + .dmg)
 
-1. Activează mediul sau folosește direct .venv.
-2. Rulează build-ul aplicației:
+Cerințe: Python 3.13 pentru .venv. Pe Python 3.14, PyQt6 pornește o singură dată
+după instalare, apoi crapă cu "Could not find the Qt platform plugin cocoa".
+
+	/opt/homebrew/opt/python@3.13/bin/python3.13 -m venv .venv
+	.venv/bin/pip install -r requirements.txt
+
+1. Rulează build-ul aplicației:
 	tools/mac/build_mac.sh
-3. Creează DMG-ul:
+2. Creează DMG-ul:
 	tools/mac/create_dmg.sh
+
+Build-ul se face în ~/Library/Caches/stava-player-build, nu în folderul
+proiectului. Motivul: proiectul stă în ~/Documents, care e sincronizat cu iCloud
+Drive, iar acesta pune com.apple.FinderInfo pe directoare. codesign refuză orice
+bundle care are acest atribut ("resource fork, Finder information, or similar
+detritus not allowed"), iar xattr -cr nu ajută pentru că atributul revine imediat.
+În dist/ se copiază doar rezultatele. Poți schimba locul cu BUILD_ROOT.
+
+build_mac.sh rulează automat tools/mac/fix_vst_bundles.sh, care repară
+plugin-urile VST. PyInstaller le sparge în două (binarul în Frameworks, restul în
+Resources, legate prin symlink-uri) și le schimbă numele din Wider.vst în
+Wider__dot__vst. În forma asta codesign le refuză, așa că scriptul le reface ca
+bundle-uri întregi, cu numele corect, și le semnează.
+
+Aplicația e semnată ad-hoc, deci merge local. Gatekeeper o va respinge pe alt Mac
+(click-dreapta → Open la prima pornire). Pentru distribuție fără avertisment e
+nevoie de Developer ID și notarizare.
+
+Atenție: dist/Stava Player.app nu trece codesign --verify --strict, pentru că
+iCloud îi pune FinderInfo după copiere. E doar o copie de lucru. Fișierul care se
+distribuie este DMG-ul, al cărui conținut nu poate fi atins de iCloud.
 
 Signing (opțional, pentru distribuție reală)
 
 1. Setează identitatea de semnare:
 	export MACOS_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
-2. Semnează aplicația și DMG-ul:
+2. Rulează din nou build-ul, ca să semneze cu ea în loc de ad-hoc:
+	tools/mac/build_mac.sh
+	tools/mac/create_dmg.sh
+3. Sau semnează ce e deja construit:
 	tools/mac/sign_mac.sh
 
 Notarization (opțional, recomandat)
@@ -29,3 +58,7 @@ Artefacte:
 
 - dist/Stava Player.app
 - dist/Stava Player-mac.dmg
+
+Aplicația e construită doar pentru arm64 (Apple Silicon). Pentru un build
+universal, trebuie target_arch='universal2' în "Stava Player mac.spec" și un
+Python universal2.
