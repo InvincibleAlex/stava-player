@@ -12,3 +12,6 @@ settings.ini
 
 # Fisier de lucru, nefolosit de aplicatie
 icons/player/png-uri/play.png
+
+# Arhive de release, generate local
+*.zip
