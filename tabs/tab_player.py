@@ -457,32 +457,43 @@ class PlayerTab(QWidget):
         self._non_art_effect_targets = []
 
         for widget in self._non_art_transition_widgets():
-            effect = widget.graphicsEffect()
-            if not isinstance(effect, QGraphicsOpacityEffect):
-                effect = QGraphicsOpacityEffect(widget)
-                widget.setGraphicsEffect(effect)
-            effect.setOpacity(opacity)
+            try:
+                effect = widget.graphicsEffect()
+                if not isinstance(effect, QGraphicsOpacityEffect):
+                    effect = QGraphicsOpacityEffect(widget)
+                    widget.setGraphicsEffect(effect)
+                effect.setOpacity(opacity)
+            except RuntimeError: # obiectul C++ a fost deja distrus
+                continue
             self._non_art_effect_targets.append(widget)
 
     def fade_non_art_controls_in(self, delay_ms=70, duration_ms=180):
-        widgets = self._non_art_transition_widgets()
-        if not widgets:
-            return
-
         def start():
+            # Lista se citeste ACUM, nu la programare: intre cele doua momente
+            # poate interveni o schimbare de tab care reconstruieste layout-ul si
+            # distruge pastilele vechi. Accesul la un widget deja distrus arunca
+            # RuntimeError dintr-un slot de timer si opreste aplicatia.
+            widgets = self._non_art_transition_widgets()
+            if not widgets:
+                return
+
             self._non_art_fade_group = QParallelAnimationGroup(self)
             targets = []
             for widget in widgets:
                 if not widget:
                     continue
-                effect = widget.graphicsEffect()
-                if not isinstance(effect, QGraphicsOpacityEffect):
-                    effect = QGraphicsOpacityEffect(widget)
-                    effect.setOpacity(0.0)
-                    widget.setGraphicsEffect(effect)
+                try:
+                    effect = widget.graphicsEffect()
+                    if not isinstance(effect, QGraphicsOpacityEffect):
+                        effect = QGraphicsOpacityEffect(widget)
+                        effect.setOpacity(0.0)
+                        widget.setGraphicsEffect(effect)
+                    start_value = effect.opacity()
+                except RuntimeError: # obiectul C++ a fost deja distrus
+                    continue
                 anim = QPropertyAnimation(effect, b"opacity")
                 anim.setDuration(duration_ms)
-                anim.setStartValue(effect.opacity())
+                anim.setStartValue(start_value)
                 anim.setEndValue(1.0)
                 anim.setEasingCurve(QEasingCurve.Type.OutQuad)
                 self._non_art_fade_group.addAnimation(anim)
