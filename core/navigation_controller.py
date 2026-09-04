@@ -109,6 +109,8 @@ class NavigationController:
 
             self.main.setUpdatesEnabled(True)
             updates_suspended = False
+            if switching_player_size:
+                self._fade_player_content_in()
             self.main.update()
             self.main.bg_manager.update_background()
             if switching_player_size:
@@ -130,6 +132,17 @@ class NavigationController:
         ui_player = getattr(self.main, "ui_player", None)
         if not ui_player:
             return
+
+        # Oprim intai animatiile care tintesc aceste efecte. setGraphicsEffect(None)
+        # sterge efectul, iar o animatie ramasa fara tinta lasa randarea efectelor
+        # intr-o stare inconsistenta: apar pictori Qt imbricati si, dupa destule
+        # tranzitii, aplicatia cade cu access violation.
+        fade_group = getattr(ui_player, "_non_art_fade_group", None)
+        if fade_group is not None:
+            try:
+                fade_group.stop()
+            except Exception:
+                pass
 
         widgets = [ui_player, getattr(ui_player, "lbl_art", None)]
         if hasattr(ui_player, "_non_art_transition_widgets"):
@@ -154,6 +167,31 @@ class NavigationController:
                 waveform.update()
             except Exception:
                 pass
+
+    def _fade_player_content_in(self):
+        """ Continutul player-ului (titlu, artist, path, waveform, transport,
+        pastile) reapare gradual dupa schimbarea de layout Full <-> Mini.
+
+        Doar fade in, intentionat. Un fade out ar cere amanarea reconstructiei
+        pana dupa el, iar amanarea lasa fereastra blocata pe ultimul cadru pana
+        la urmatorul eveniment de mouse: ciclul setUpdatesEnabled din rebuild
+        inghite cererea de redesenare, iar singura compensare care functiona -
+        un repaint sincron - producea desenari imbricate peste efectele grafice
+        si, dupa destule tranzitii, cadere cu access violation.
+        """
+        ui_player = getattr(self.main, "ui_player", None)
+        if not ui_player or not hasattr(ui_player, "fade_non_art_controls_in"):
+            return
+        try:
+            ui_player.set_non_art_controls_opacity(0.0)
+            # Pornim fade-ul dupa ce se aseaza munca grea de dupa comutare
+            # (reconstructia layout-ului, re-randarea waveform-ului, fundalul).
+            # Cu delay 0 animatia pornea, dar nu primea tacte: ceasul ei ramanea
+            # la 0 pana se elibera firul principal, iar opacitatea sarea brusc
+            # de la 0 la 1 in loc sa creasca gradual.
+            ui_player.fade_non_art_controls_in(delay_ms=170, duration_ms=220)
+        except Exception:
+            pass
 
     def _prepare_waveform_for_layout_transition(self):
         waveform = getattr(getattr(self.main, "ui_player", None), "waveform", None)
