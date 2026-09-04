@@ -9,3 +9,6 @@ dist/
 
 # Setarile si starea locala (cai personale, ultima piesa, geometrie)
 settings.ini
+
+# Fisier de lucru, nefolosit de aplicatie
+icons/player/png-uri/play.png

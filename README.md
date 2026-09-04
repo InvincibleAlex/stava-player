@@ -62,10 +62,6 @@ without any setup. It is not a secret: every application using Rich Presence
 sends its Client ID to Discord from each user. You can replace it with your own
 Discord application ID under **Settings → Discord**.
 
-**`settings.ini` is not included in the repository.** It holds preferences and
-local paths that differ between installations, and it is generated
-automatically.
-
 **The interface is in Romanian.**
 
 ## Licence
